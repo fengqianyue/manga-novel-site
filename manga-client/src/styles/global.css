@@ -1,0 +1,26 @@
+/* ======================================== */
+/*  全局样式 - yuriheme 设计语言             */
+/*  配色: #8d56da(紫) #f0f3f7(背景灰蓝)     */
+/* ======================================== */
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  color: #000;
+  line-height: 1.7;
+  background: #f0f3f7;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: #8d56da;
+  text-decoration: none;
+}
+

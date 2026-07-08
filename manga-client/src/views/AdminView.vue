@@ -1,0 +1,731 @@
+<script setup>
+import { ref, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Edit, Delete, Document, Tickets, PriceTag, Lock, Search } from '@element-plus/icons-vue'
+import { getWorkList, getWorkTags } from '@/api/work'
+import { adminLogin, addWork, updateWork, toggleWorkStatus, updateWorkTags } from '@/api/admin'
+import { getTags, addTag, deleteTag } from '@/api/admin'
+import { getChapters, addChapter, deleteChapter } from '@/api/admin'
+import request from '@/api/request'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
+
+// ========== 上传 ==========
+const uploadHeaders = { Authorization: 'Bearer ' + (userStore.adminToken || '') }
+
+function beforeCoverUpload(file) {
+  const isValid = file.type.startsWith('image/')
+  if (!isValid) ElMessage.error('仅支持图片文件')
+  return isValid
+}
+function onCoverSuccess(res) {
+  workForm.value.coverUrl = res.data.url
+  ElMessage.success('封面上传成功')
+}
+
+const folderInput = ref(null)
+const folderUploading = ref(false)
+
+function beforePageUpload(file) {
+  return file.type.startsWith('image/')
+}
+
+function selectFolder() {
+  folderInput.value?.click()
+}
+
+async function onFolderSelected(e) {
+  const files = Array.from(e.target.files)
+    .filter(f => f.type.startsWith('image/'))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  if (files.length === 0) { ElMessage.warning('文件夹中无图片文件'); return }
+  folderUploading.value = true
+  let done = 0
+  for (const file of files) {
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await request.post(`/file/upload?dir=manga/${selectedWork.value?.id || 0}`, form, {
+        headers: { 'Content-Type': 'multipart/form-data', Authorization: uploadHeaders.Authorization },
+        silent: true,
+      })
+      newChapterForm.value.uploadedUrls.push(res.data.url)
+      done++
+    } catch { /* 跳过失败的 */ }
+  }
+  folderUploading.value = false
+  ElMessage.success(`已上传 ${done}/${files.length} 张图片`)
+  // 重置 input 以便可以重复选择同一文件夹
+  e.target.value = ''
+}
+
+// ========== 管理员认证 ==========
+const loginForm = ref({ username: '', password: '' })
+const loginLoading = ref(false)
+
+onMounted(() => {
+  if (userStore.isAdminAuth) {
+    loadAll()
+  }
+})
+
+async function doAdminLogin() {
+  if (!loginForm.value.username || !loginForm.value.password) {
+    ElMessage.warning('请输入用户名和密码')
+    return
+  }
+  loginLoading.value = true
+  try {
+    const res = await adminLogin(loginForm.value)
+    userStore.setAdminLogin(res.data)
+    ElMessage.success('管理员登录成功')
+    loadAll()
+  } catch {
+    // 错误已在拦截器处理
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+function doAdminLogout() {
+  userStore.adminLogout()
+}
+
+// ========== 菜单 ==========
+const activeMenu = ref('works')
+
+// ========== 数据 ==========
+const works = ref([])
+const allTags = ref([])
+const users = ref([])
+
+// 作品筛选
+const workStatusFilter = ref(null)  // null=全部, 1=上架, 0=下架
+const workSearch = ref('')
+
+// 章节编辑
+const editingChapter = ref(null)
+const editChapterForm = ref({ title: '', chapterNum: 0 })
+const editChapterUploaded = ref([])
+const showChapterEdit = ref(false)
+
+// 漫画页管理
+const viewingChapter = ref(null)
+const chapterPages = ref([])
+const showPagesDialog = ref(false)
+const workDialogVisible = ref(false)
+const isEdit = ref(false)
+const workForm = ref({ title: '', author: '', type: 'manga', summary: '', status: 1 })
+const selectedTagIds = ref([])
+
+const selectedWork = ref(null)
+const chapters = ref([])
+const chapterForm = ref({ title: '', chapterNum: 0 })
+
+const newTagName = ref('')
+
+async function loadAll() {
+  const params = { pageSize: 100 }
+  if (workStatusFilter.value !== null) params.status = workStatusFilter.value
+  if (workSearch.value) params.keyword = workSearch.value
+  // 管理员专用列表接口
+  const res = await request.get('/work/admin-list', { params, silent: true })
+  works.value = res.data.records
+  const tagRes = await getTags()
+  allTags.value = tagRes.data
+}
+
+function onStatusFilter(val) { workStatusFilter.value = val; loadAll() }
+function onSearch() { loadAll() }
+
+// ========== 删除作品 ==========
+async function deleteWork(row) {
+  await ElMessageBox.confirm(`确认删除「${row.title}」？`, '警告', { type: 'warning' })
+  await request.delete(`/work/${row.id}`, { silent: true })
+  ElMessage.success('已删除')
+  loadAll()
+}
+
+// ========== 章节编辑 ==========
+function openEditChapter(row) {
+  editingChapter.value = row
+  editChapterForm.value = { title: row.title, chapterNum: row.chapterNum }
+  editChapterUploaded.value = []
+  showChapterEdit.value = true
+}
+
+function onEditFileSuccess(res) {
+  editChapterUploaded.value.push(res.data.url)
+}
+
+function removeEditFile(index) {
+  editChapterUploaded.value.splice(index, 1)
+}
+
+async function saveChapterEdit() {
+  await request.put('/chapter', {
+    id: editingChapter.value.id,
+    workId: editingChapter.value.workId,
+    title: editChapterForm.value.title,
+    chapterNum: editChapterForm.value.chapterNum,
+  }, { silent: true })
+  if (editChapterUploaded.value.length > 0) {
+    await request.post('/manga-page/batch', {
+      chapterId: editingChapter.value.id,
+      imageUrls: editChapterUploaded.value,
+    }, { silent: true })
+  }
+  ElMessage.success(editChapterUploaded.value.length > 0
+    ? `章节已更新，新增 ${editChapterUploaded.value.length} 张图片`
+    : '章节已更新')
+  showChapterEdit.value = false
+  selectWork(selectedWork.value)
+}
+
+// ========== 漫画页管理 ==========
+async function openPagesDialog(chapter) {
+  viewingChapter.value = chapter
+  const res = await request.get(`/manga-page/list/${chapter.id}`, { silent: true })
+  chapterPages.value = res.data
+  showPagesDialog.value = true
+}
+async function deletePage(page) {
+  await request.delete(`/manga-page/${page.id}`, { silent: true })
+  ElMessage.success('已删除')
+  // 刷新
+  const res = await request.get(`/manga-page/list/${viewingChapter.value.id}`, { silent: true })
+  chapterPages.value = res.data
+}
+
+// ========== TXT 导入 ==========
+const showTxtImport = ref(false)
+const txtUploading = ref(false)
+
+function openTxtImport() { showTxtImport.value = true }
+async function onTxtSuccess(res) {
+  ElMessage.success(`导入完成！自动创建了 ${res.data.chapters} 个章节`)
+  showTxtImport.value = false
+  selectWork(selectedWork.value)
+}
+
+// ========== 用户管理 ==========
+async function loadUsers() {
+  const res = await request.get('/user/list', { silent: true })
+  users.value = res.data
+}
+async function toggleUser(row) {
+  const action = row.isDeleted ? '启用' : '禁用'
+  await ElMessageBox.confirm(`确认${action}用户「${row.username}」？`)
+  await request.put(`/user/${row.id}/toggle`, null, { silent: true })
+  ElMessage.success(`已${action}`)
+  loadUsers()
+}
+
+// ========== 作品 CRUD ==========
+async function openAddWork() {
+  isEdit.value = false
+  workForm.value = { title: '', author: '', type: 'manga', summary: '', status: 1, publishYear: null, completed: 0 }
+  selectedTagIds.value = []
+  workDialogVisible.value = true
+}
+async function openEditWork(row) {
+  isEdit.value = true
+  workForm.value = { id: row.id, title: row.title, author: row.author, type: row.type, summary: row.summary, status: row.status, publishYear: row.publishYear, completed: row.completed }
+  try {
+    const res = await getWorkTags(row.id)
+    selectedTagIds.value = res.data.map(t => t.id)
+  } catch { selectedTagIds.value = [] }
+  workDialogVisible.value = true
+}
+async function saveWork() {
+  if (isEdit.value) {
+    await updateWork(workForm.value)
+    await updateWorkTags(workForm.value.id, selectedTagIds.value)
+    ElMessage.success('修改成功')
+  } else {
+    const res = await addWork(workForm.value)
+    await updateWorkTags(res.data, selectedTagIds.value)
+    ElMessage.success('新增成功')
+  }
+  workDialogVisible.value = false
+  loadAll()
+}
+async function toggleWork(row) {
+  await ElMessageBox.confirm(`确认${row.status === 1 ? '下架' : '上架'}「${row.title}」？`)
+  await toggleWorkStatus(row.id, row.status === 1 ? 0 : 1)
+  loadAll()
+}
+
+// ========== 章节 ==========
+const newChapterVisible = ref(false)
+const newChapterForm = ref({ title: '', chapterNum: 0, uploadedUrls: [] })
+const uploadingChapter = ref(false)
+
+async function selectWork(w) {
+  selectedWork.value = w
+  const res = await getChapters(w.id)
+  chapters.value = res.data
+}
+
+function openNewChapter() {
+  newChapterForm.value = { title: '', chapterNum: (chapters.value.length || 0) + 1, uploadedUrls: [], textContent: '' }
+  newChapterVisible.value = true
+}
+
+function onChapterFileSuccess(res) {
+  newChapterForm.value.uploadedUrls.push(res.data.url)
+}
+
+function removeChapterFile(index) {
+  newChapterForm.value.uploadedUrls.splice(index, 1)
+}
+
+async function saveNewChapter() {
+  if (!newChapterForm.value.title) { ElMessage.warning('请输入章节标题'); return }
+  uploadingChapter.value = true
+  try {
+    const chRes = await addChapter({
+      workId: selectedWork.value.id,
+      title: newChapterForm.value.title,
+      chapterNum: newChapterForm.value.chapterNum,
+    })
+    // 如果有上传的图片，批量导入
+    const newChId = chRes.data
+    if (newChId && newChapterForm.value.textContent) {
+      await request.post('/novel-content/save', {
+        chapterId: newChId,
+        textContent: newChapterForm.value.textContent,
+      }, { silent: true })
+    }
+    if (newChId && newChapterForm.value.uploadedUrls.length > 0) {
+      await request.post('/manga-page/batch', {
+        chapterId: newChId,
+        imageUrls: newChapterForm.value.uploadedUrls,
+      }, { silent: true })
+    }
+    const imgCount = newChapterForm.value.uploadedUrls.length
+    ElMessage.success(imgCount > 0 ? `章节已创建，共 ${imgCount} 张图片` : '章节已创建')
+    newChapterVisible.value = false
+    selectWork(selectedWork.value)
+  } catch { /* 忽略 */ }
+  finally { uploadingChapter.value = false }
+}
+
+async function delChapter(row) {
+  await deleteChapter(row.id)
+  ElMessage.success('已删除')
+  selectWork(selectedWork.value)
+}
+
+// ========== 标签管理 ==========
+async function doAddTag() {
+  if (!newTagName.value.trim()) return
+  await addTag(newTagName.value.trim())
+  newTagName.value = ''
+  ElMessage.success('标签已添加')
+  const res = await getTags()
+  allTags.value = res.data
+}
+async function doDeleteTag(tag) {
+  await deleteTag(tag.id)
+  ElMessage.success('已删除')
+  const res = await getTags()
+  allTags.value = res.data
+}
+</script>
+
+<template>
+  <div class="admin-layout">
+    <!-- ====== 未登录：显示管理员登录表单 ====== -->
+    <template v-if="!userStore.isAdminAuth">
+      <div class="admin-login-page">
+        <div class="admin-login-card">
+          <div class="admin-login-icon"><el-icon :size="40" color="#8d56da"><Lock /></el-icon></div>
+          <h2>管理后台</h2>
+          <el-form :model="loginForm" label-position="top" @keyup.enter="doAdminLogin">
+            <el-form-item label="管理员账号">
+              <el-input v-model="loginForm.username" placeholder="请输入管理员账号" />
+            </el-form-item>
+            <el-form-item label="密码">
+              <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password />
+            </el-form-item>
+          </el-form>
+          <el-button type="primary" :loading="loginLoading" class="btn-admin-login" @click="doAdminLogin">登 录</el-button>
+          <p class="admin-login-tip">仅限管理员登录，普通用户无法进入</p>
+        </div>
+      </div>
+    </template>
+
+    <!-- ====== 已登录：正常后台 ====== -->
+    <template v-else>
+      <aside class="admin-sidebar">
+        <h2 class="admin-logo">⚙ 管理后台</h2>
+        <el-menu :default-active="activeMenu" @select="activeMenu = $event" background-color="#2a2a2a" text-color="#bbb" active-text-color="#8d56da">
+          <el-menu-item index="works"><el-icon><Document /></el-icon> 作品管理</el-menu-item>
+          <el-menu-item index="chapters"><el-icon><Tickets /></el-icon> 章节管理</el-menu-item>
+          <el-menu-item index="tags"><el-icon><PriceTag /></el-icon> 标签管理</el-menu-item>
+          <el-menu-item index="users" @click="loadUsers"><el-icon><el-icon><User /></el-icon></el-icon> 用户管理</el-menu-item>
+        </el-menu>
+        <div class="sidebar-footer">
+          <p class="sidebar-user">{{ userStore.adminUser?.username }}</p>
+          <a href="javascript:;" @click="doAdminLogout">退出登录</a>
+          <a href="/" style="margin-top:8px">← 返回首页</a>
+        </div>
+      </aside>
+
+      <main class="admin-main">
+        <!-- 作品管理 -->
+        <template v-if="activeMenu === 'works'">
+          <div class="section-header"><h3>作品管理</h3></div>
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+            <el-radio-group v-model="workStatusFilter" size="small" @change="onStatusFilter">
+              <el-radio-button :value="null">全部</el-radio-button>
+              <el-radio-button :value="1">上架</el-radio-button>
+              <el-radio-button :value="0">下架</el-radio-button>
+            </el-radio-group>
+            <el-input v-model="workSearch" placeholder="搜索标题/作者" size="small" style="width:220px" clearable @clear="onSearch" @keyup.enter="onSearch">
+              <template #suffix><el-icon @click="onSearch" style="cursor:pointer"><Search /></el-icon></template>
+            </el-input>
+            <el-button type="primary" :icon="Plus" @click="openAddWork">新增作品</el-button>
+          </div>
+          <el-table :data="works" stripe>
+            <el-table-column prop="id" label="ID" width="70" />
+            <el-table-column prop="title" label="标题" />
+            <el-table-column prop="author" label="作者" width="140" />
+            <el-table-column prop="type" label="类型" width="80">
+              <template #default="{ row }">{{ row.type === 'manga' ? '漫画' : '小说' }}</template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">{{ row.status === 1 ? '上架' : '下架' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="250">
+              <template #default="{ row }">
+                <el-button size="small" :icon="Edit" @click="openEditWork(row)">编辑</el-button>
+                <el-button size="small" @click="toggleWork(row)">{{ row.status === 1 ? '下架' : '上架' }}</el-button>
+                <el-button size="small" type="danger" :icon="Delete" @click="deleteWork(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+
+        <!-- 章节管理 -->
+        <template v-if="activeMenu === 'chapters'">
+          <div class="chapter-layout">
+            <div class="chapter-work-list">
+              <h4>选择作品</h4>
+              <div v-for="w in works" :key="w.id" class="work-select-item" :class="{ active: selectedWork?.id === w.id }" @click="selectWork(w)">{{ w.title }}</div>
+            </div>
+            <div class="chapter-detail">
+              <template v-if="selectedWork">
+                <div class="section-header">
+                  <h3>「{{ selectedWork.title }}」的章节</h3>
+                  <div style="display:flex;gap:8px">
+                    <el-button v-if="selectedWork.type === 'novel'" size="small" @click="openTxtImport">📄 导入 TXT</el-button>
+                    <el-button type="primary" :icon="Plus" @click="openNewChapter">新增章节</el-button>
+                  </div>
+                </div>
+                <el-table :data="chapters" stripe>
+                  <el-table-column prop="chapterNum" label="序号" width="70" />
+                  <el-table-column prop="title" label="标题" />
+                  <el-table-column label="操作" width="210">
+                    <template #default="{ row }">
+                      <el-button size="small" :icon="Edit" @click="openEditChapter(row)">编辑</el-button>
+                      <el-button size="small" @click="openPagesDialog(row)">页面</el-button>
+                      <el-button size="small" type="danger" :icon="Delete" @click="delChapter(row)" />
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </template>
+              <div v-else class="empty-tip">← 请先选择一部作品</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 标签管理 -->
+        <template v-if="activeMenu === 'tags'">
+          <div class="section-header"><h3>标签管理</h3></div>
+          <div class="tag-create">
+            <el-input v-model="newTagName" placeholder="输入新标签名..." style="width:260px" @keyup.enter="doAddTag" />
+            <el-button type="primary" :icon="Plus" @click="doAddTag">添加</el-button>
+          </div>
+          <div class="tag-list">
+            <el-tag v-for="t in allTags" :key="t.id" closable size="large" class="tag-item" @close="doDeleteTag(t)">{{ t.name }}</el-tag>
+          </div>
+        </template>
+
+        <!-- 用户管理 -->
+        <template v-if="activeMenu === 'users'">
+          <div class="section-header"><h3>用户列表</h3></div>
+          <el-table :data="users" stripe>
+            <el-table-column prop="id" label="ID" width="70" />
+            <el-table-column prop="username" label="用户名" />
+            <el-table-column prop="email" label="邮箱" />
+            <el-table-column prop="role" label="角色" width="90">
+              <template #default="{ row }">{{ row.role === 1 ? '管理员' : '用户' }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="100">
+              <template #default="{ row }">
+                <el-button v-if="row.role !== 1" size="small" type="danger" plain @click="toggleUser(row)">
+                  {{ row.isDeleted ? '启用' : '禁用' }}
+                </el-button>
+                <span v-else style="color:#ccc;font-size:12px">—</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </main>
+    </template>
+
+    <!-- 作品弹窗 -->
+    <el-dialog v-model="workDialogVisible" :title="isEdit ? '编辑作品' : '新增作品'" width="520px">
+      <el-form :model="workForm" label-position="top">
+        <el-form-item label="标题"><el-input v-model="workForm.title" placeholder="作品标题" /></el-form-item>
+        <el-form-item label="作者"><el-input v-model="workForm.author" placeholder="作者名" /></el-form-item>
+        <el-form-item label="封面">
+          <el-upload
+            class="cover-upload"
+            :action="'/api/file/upload?dir=covers'"
+            :headers="uploadHeaders"
+            :show-file-list="false"
+            :before-upload="beforeCoverUpload"
+            :on-success="onCoverSuccess"
+            accept="image/*"
+          >
+            <img v-if="workForm.coverUrl" :src="'/uploads/' + workForm.coverUrl" class="cover-preview" />
+            <el-button v-else type="primary" plain size="small">选择封面</el-button>
+          </el-upload>
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="类型">
+              <el-radio-group v-model="workForm.type"><el-radio value="manga">漫画</el-radio><el-radio value="novel">小说</el-radio></el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="状态">
+              <el-switch v-model="workForm.status" :active-value="1" :inactive-value="0" active-text="上架" inactive-text="下架" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="简介"><el-input v-model="workForm.summary" type="textarea" :rows="3" placeholder="作品简介" /></el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="出版年份"><el-input-number v-model="workForm.publishYear" :min="1990" :max="2030" placeholder="年份" /></el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="完结状态">
+              <el-radio-group v-model="workForm.completed">
+                <el-radio :value="0">连载中</el-radio>
+                <el-radio :value="1">已完结</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="标签">
+          <el-select v-model="selectedTagIds" multiple placeholder="选择标签" style="width:100%">
+            <el-option v-for="t in allTags" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="workDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveWork">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新增章节弹窗（含上传） -->
+    <el-dialog v-model="newChapterVisible" title="新增章节" width="560px">
+      <el-form :model="newChapterForm" label-position="top">
+        <el-row :gutter="16">
+          <el-col :span="15">
+            <el-form-item label="章节标题"><el-input v-model="newChapterForm.title" placeholder="如：第七话" /></el-form-item>
+          </el-col>
+          <el-col :span="9">
+            <el-form-item label="序号"><el-input-number v-model="newChapterForm.chapterNum" :min="0.5" :step="1" /></el-form-item>
+          </el-col>
+        </el-row>
+        <!-- 漫画：上传图片 | 小说：文本框 -->
+        <template v-if="selectedWork?.type !== 'novel'">
+          <el-form-item label="上传图片（选填，可多选）">
+            <el-upload
+              :action="'/api/file/upload?dir=manga/'+(selectedWork?.id||0)"
+              :headers="uploadHeaders"
+              multiple
+              :show-file-list="false"
+              :before-upload="beforePageUpload"
+              :on-success="onChapterFileSuccess"
+              accept="image/*"
+              drag
+            >
+              <el-icon class="el-icon--upload"><Plus /></el-icon>
+              <div class="el-upload__text">拖拽图片到此处 或 <em>点击选择</em></div>
+            </el-upload>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+              <el-button size="small" @click="selectFolder" :loading="folderUploading">📁 选择文件夹</el-button>
+              <span style="font-size:12px;color:#999">直接上传整个文件夹内的图片</span>
+            </div>
+            <input ref="folderInput" type="file" webkitdirectory directory multiple accept="image/*" style="display:none" @change="onFolderSelected" />
+          </el-form-item>
+          <div v-if="newChapterForm.uploadedUrls.length > 0" class="upload-preview">
+            <div v-for="(url, idx) in newChapterForm.uploadedUrls" :key="idx" class="preview-item">
+              <img :src="'/uploads/' + url" class="preview-thumb" />
+              <el-icon class="preview-remove" @click="removeChapterFile(idx)"><Delete /></el-icon>
+            </div>
+          </div>
+        </template>
+        <el-form-item v-else label="正文内容">
+          <el-input v-model="newChapterForm.textContent" type="textarea" :rows="10" placeholder="输入章节正文..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="newChapterVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveNewChapter" :loading="uploadingChapter">
+          创建章节{{ newChapterForm.uploadedUrls.length ? '（含 ' + newChapterForm.uploadedUrls.length + ' 张图）' : '' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 章节编辑弹窗 -->
+    <el-dialog v-model="showChapterEdit" title="编辑章节" width="560px">
+      <el-form :model="editChapterForm" label-position="top">
+        <el-row :gutter="16">
+          <el-col :span="15">
+            <el-form-item label="章节标题"><el-input v-model="editChapterForm.title" /></el-form-item>
+          </el-col>
+          <el-col :span="9">
+            <el-form-item label="序号"><el-input-number v-model="editChapterForm.chapterNum" :min="0.5" :step="1" /></el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="追加图片（选填）">
+          <el-upload
+            :action="'/api/file/upload?dir=manga/'+(selectedWork?.id||0)"
+            :headers="uploadHeaders"
+            multiple
+            :show-file-list="false"
+            :before-upload="beforePageUpload"
+            :on-success="onEditFileSuccess"
+            accept="image/*"
+            drag
+          >
+            <el-icon class="el-icon--upload"><Plus /></el-icon>
+            <div class="el-upload__text">拖拽或点击追加图片</div>
+          </el-upload>
+        </el-form-item>
+        <div v-if="editChapterUploaded.length > 0" class="upload-preview">
+          <div v-for="(url, idx) in editChapterUploaded" :key="idx" class="preview-item">
+            <img :src="'/uploads/' + url" class="preview-thumb" />
+            <el-icon class="preview-remove" @click="removeEditFile(idx)"><Delete /></el-icon>
+          </div>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="showChapterEdit = false">取消</el-button>
+        <el-button type="primary" @click="saveChapterEdit">
+          保存{{ editChapterUploaded.length ? '（新增 ' + editChapterUploaded.length + ' 张图）' : '' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- TXT 导入弹窗 -->
+    <el-dialog v-model="showTxtImport" title="导入小说 TXT" width="480px">
+      <p style="color:#666;margin-bottom:16px;font-size:14px">
+        上传 TXT 文件，系统自动识别章节标记（如"1 标题"）并拆分
+      </p>
+      <el-upload
+        :action="'/api/novel-content/import?workId='+(selectedWork?.id||0)"
+        :headers="uploadHeaders"
+        :show-file-list="true"
+        :limit="1"
+        :on-success="onTxtSuccess"
+        accept=".txt"
+        drag
+      >
+        <el-icon class="el-icon--upload"><Plus /></el-icon>
+        <div class="el-upload__text">拖拽 TXT 文件到此处 或 <em>点击选择</em></div>
+      </el-upload>
+    </el-dialog>
+
+    <!-- 漫画页预览弹窗 -->
+    <el-dialog v-model="showPagesDialog" :title="'「' + (viewingChapter?.title || '') + '」的页面'" width="700px">
+      <div v-if="chapterPages.length === 0" style="color:#999;text-align:center;padding:40px">暂无图片</div>
+      <div v-else class="pages-grid">
+        <div v-for="p in chapterPages" :key="p.id" class="page-item">
+          <img :src="'/uploads/' + p.imageUrl" class="page-thumb" />
+          <span class="page-num">第{{ p.pageNum }}页</span>
+          <el-button size="small" type="danger" :icon="Delete" circle @click="deletePage(p)" />
+        </div>
+      </div>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+/* ====== 登录页 ====== */
+.admin-login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f3f7;
+  width: 100%;
+}
+.admin-login-card {
+  background: #fff;
+  padding: 48px 40px 36px;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  width: 400px;
+}
+.admin-login-icon { text-align: center; margin-bottom: 16px; }
+.admin-login-card h2 { text-align: center; font-size: 20px; color: #333; margin-bottom: 28px; }
+.btn-admin-login { width: 100%; }
+.admin-login-tip { text-align: center; margin-top: 14px; font-size: 12px; color: #bbb; }
+
+/* ====== 管理布局 ====== */
+.admin-layout { display: flex; min-height: 100vh; background: #f0f3f7; }
+.admin-sidebar { width: 200px; background: #2a2a2a; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
+.admin-logo { color: #fff; font-size: 16px; padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.sidebar-footer { margin-top: auto; padding: 20px; border-top: 1px solid rgba(255,255,255,0.08); }
+.sidebar-footer a { color: #888; font-size: 13px; text-decoration: none; display: block; }
+.sidebar-footer a:hover { color: #8d56da; }
+.sidebar-user { color: #8d56da; font-size: 14px; margin-bottom: 8px; }
+.admin-main { flex: 1; margin-left: 200px; padding: 32px 36px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.section-header h3 { font-size: 18px; color: #333; }
+.chapter-layout { display: flex; gap: 28px; }
+.chapter-work-list { width: 220px; flex-shrink: 0; }
+.chapter-work-list h4 { margin-bottom: 12px; color: #555; }
+.work-select-item { padding: 10px 14px; margin-bottom: 6px; background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+.work-select-item:hover { background: #e9e0f5; }
+.work-select-item.active { background: #8d56da; color: #fff; }
+.chapter-detail { flex: 1; }
+.empty-tip { color: #999; padding: 60px 0; text-align: center; }
+.tag-create { display: flex; gap: 12px; margin-bottom: 20px; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 12px; }
+.tag-item { cursor: pointer; }
+
+/* 封面上传 */
+.cover-preview {
+  max-width: 200px; max-height: 150px;
+  border-radius: 6px; border: 1px solid #eee;
+}
+.cover-upload { display: inline-block; }
+
+/* 章节图片上传 */
+.page-upload { background: #f8f9fb; padding: 16px; border-radius: 8px; }
+
+/* 漫画页预览 */
+.pages-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.page-item { text-align: center; position: relative; }
+.page-thumb { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
+.page-num { display: block; font-size: 12px; color: #999; margin-top: 4px; }
+
+/* 章节上传预览 */
+.upload-preview { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.preview-item { position: relative; width: 80px; height: 110px; }
+.preview-thumb { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
+.preview-remove { position: absolute; top: -6px; right: -6px; background: #d50707; color: #fff; border-radius: 50%; cursor: pointer; font-size: 14px; padding: 2px; }
+</style>

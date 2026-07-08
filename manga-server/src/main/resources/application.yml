@@ -1,0 +1,42 @@
+server:
+  port: 8088
+
+spring:
+  profiles:
+    active: dev
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+mybatis-plus:
+  type-aliases-package: com.manganovel.entity
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Knife4j
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET:manga-novel-site-jwt-secret-key-2024-default}
+  expiration: 604800000
+
+# 文件上传路径
+app:
+  upload-path: uploads/
