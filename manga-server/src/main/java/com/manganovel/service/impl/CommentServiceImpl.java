@@ -28,8 +28,10 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 .list();
         // 批量加载用户，避免 N+1 查询
         Set<Long> userIds = list.stream().map(Comment::getUserId).collect(Collectors.toSet());
-        Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
-                .collect(Collectors.toMap(User::getId, u -> u));
+        // 空集合会导致 selectBatchIds 生成 WHERE id IN () 非法 SQL，必须守卫
+        Map<Long, User> userMap = userIds.isEmpty() ? Map.of() :
+                userMapper.selectBatchIds(userIds).stream()
+                        .collect(Collectors.toMap(User::getId, u -> u));
         List<Map<String, Object>> result = new ArrayList<>();
         for (Comment c : list) {
             User u = userMap.get(c.getUserId());

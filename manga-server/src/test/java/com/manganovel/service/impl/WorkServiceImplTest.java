@@ -21,6 +21,9 @@ class WorkServiceImplTest {
     @Autowired
     private WorkServiceImpl workService;
 
+    @Autowired
+    private javax.sql.DataSource dataSource;
+
     @BeforeEach
     void setUp() {
         workService.lambdaUpdate().remove();
@@ -109,9 +112,30 @@ class WorkServiceImplTest {
         Work w3 = createWork("新作", "novel", 1, null);
         w3.setPublishYear(2024); w3.setCompleted(0); workService.updateById(w3);
 
-        Page<Work> result = workService.pageWithFilter(null, null, 2020, 1, 1, 10);
+        Page<Work> result = workService.pageWithFilter(null, null, 2020, 1, null, 1, 10);
         assertEquals(1, result.getTotal());
         assertEquals("旧作完结", result.getRecords().get(0).getTitle());
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("筛选 - 按标签筛选（work_tag 关联）")
+    void shouldFilterByTag() throws Exception {
+        Work tagged = createWork("带标签作品", "manga", 1, null);
+        createWork("无标签作品", "manga", 1, null);
+
+        // 用原生 SQL 插入标签关联（work_tag 为物理关联表）
+        try (var conn = dataSource.getConnection(); var stmt = conn.createStatement()) {
+            stmt.execute("INSERT INTO work_tag (work_id, tag_id) VALUES (" + tagged.getId() + ", 1)");
+        }
+
+        Page<Work> withTag = workService.pageWithFilter(null, null, null, null, 1L, 1, 10);
+        assertEquals(1, withTag.getTotal());
+        assertEquals("带标签作品", withTag.getRecords().get(0).getTitle());
+
+        // 不传 tagId 时不过滤
+        Page<Work> all = workService.pageWithFilter(null, null, null, null, null, 1, 10);
+        assertEquals(2, all.getTotal());
     }
 
     // ==================== 辅助方法 ====================

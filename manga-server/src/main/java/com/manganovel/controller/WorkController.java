@@ -78,9 +78,10 @@ public class WorkController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer publishYear,
             @RequestParam(required = false) Integer completed,
+            @RequestParam(required = false) Long tagId,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "20") int pageSize) {
-        return Result.ok(workService.pageWithFilter(type, keyword, publishYear, completed, pageNum, pageSize));
+        return Result.ok(workService.pageWithFilter(type, keyword, publishYear, completed, tagId, pageNum, pageSize));
     }
 
     @GetMapping("/admin-list")

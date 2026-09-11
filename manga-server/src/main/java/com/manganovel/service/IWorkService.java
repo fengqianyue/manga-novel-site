@@ -8,5 +8,5 @@ public interface IWorkService extends IService<Work> {
     Page<Work> pageByType(String type, int pageNum, int pageSize, String keyword);
     Page<Work> pageForAdmin(Integer status, String keyword, int pageNum, int pageSize);
     Page<Work> pageWithFilter(String type, String keyword, Integer publishYear, Integer completed,
-                              Integer pageNum, Integer pageSize);
+                              Long tagId, Integer pageNum, Integer pageSize);
 }

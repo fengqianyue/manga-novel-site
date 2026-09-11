@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import request from '@/api/request'
 import { useGoBack } from '@/composables/useGoBack'
@@ -40,6 +40,7 @@ async function loadWorks() {
   if (filters.value.keyword) p.keyword = filters.value.keyword
   if (filters.value.publishYear) p.publishYear = filters.value.publishYear
   if (filters.value.completed !== null && filters.value.completed !== '') p.completed = filters.value.completed
+  if (filters.value.tagId) p.tagId = filters.value.tagId
   try {
     const res = await request.get('/work/filter', { params: p, silent: true })
     works.value = res.data.records || []
@@ -48,7 +49,7 @@ async function loadWorks() {
   finally { loading.value = false }
 }
 
-watch([() => filters.value.type, () => filters.value.completed, () => filters.value.publishYear],
+watch([() => filters.value.type, () => filters.value.completed, () => filters.value.publishYear, () => filters.value.tagId],
   () => { page.value = 1; loadWorks() })
 
 const { goBack } = useGoBack()

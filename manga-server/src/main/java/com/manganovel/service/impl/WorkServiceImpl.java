@@ -41,7 +41,7 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements IW
 
     @Override
     public Page<Work> pageWithFilter(String type, String keyword, Integer publishYear, Integer completed,
-                                      Integer pageNum, Integer pageSize) {
+                                      Long tagId, Integer pageNum, Integer pageSize) {
         LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Work::getStatus, 1).isNull(Work::getUserId);
         if (StringUtils.hasText(type)) wrapper.eq(Work::getType, type);
@@ -49,6 +49,9 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements IW
             wrapper.and(w -> w.like(Work::getTitle, keyword).or().like(Work::getAuthor, keyword));
         if (publishYear != null) wrapper.eq(Work::getPublishYear, publishYear);
         if (completed != null) wrapper.eq(Work::getCompleted, completed);
+        // tagId 为 Long 类型，拼接内容仅含数字，无注入风险
+        if (tagId != null)
+            wrapper.inSql(Work::getId, "SELECT work_id FROM work_tag WHERE tag_id = " + tagId);
         wrapper.orderByDesc(Work::getCreatedAt);
         return page(new Page<>(pageNum, pageSize), wrapper);
     }

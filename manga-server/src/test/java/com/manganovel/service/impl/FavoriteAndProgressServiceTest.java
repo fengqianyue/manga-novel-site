@@ -74,10 +74,11 @@ class FavoriteAndProgressServiceTest {
 
     @Test
     @Order(3)
-    @DisplayName("收藏 - 重复收藏抛异常（唯一约束）")
+    @DisplayName("收藏 - 重复收藏幂等（静默忽略，不重复入库）")
     void shouldRejectDuplicateFavorite() {
         favoriteService.add(userId, workId);
-        assertThrows(Exception.class, () -> favoriteService.add(userId, workId));
+        assertDoesNotThrow(() -> favoriteService.add(userId, workId));
+        assertEquals(1, favoriteService.listByUser(userId).size(), "重复收藏不应产生第二条记录");
     }
 
     @Test
