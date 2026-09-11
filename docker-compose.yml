@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # ==================== MySQL 8.0 ====================
+  mysql:
+    image: mysql:8.0
+    container_name: manga-mysql
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: manga_novel
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - manga-net
+
+  # ==================== Elasticsearch 9.3 ====================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.1
+    container_name: manga-es
+    restart: unless-stopped
+    ports:
+      - "${ES_PORT:-1001}:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - manga-net
+
+  # ==================== Spring Boot 后端 ====================
+  backend:
+    build:
+      context: .                          # 项目根目录（需要访问父 pom.xml）
+      dockerfile: ./manga-server/Dockerfile
+    container_name: manga-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8088}:8088"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/manga_novel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=${MYSQL_ROOT_USERNAME:-root}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-123456}
+      - APP_ES_URI=http://elasticsearch:9200
+      - APP_UPLOAD_PATH=/app/uploads
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - manga-net
+
+  # ==================== Nginx 前端 ====================
+  frontend:
+    build:
+      context: ./manga-client
+      dockerfile: Dockerfile
+    container_name: manga-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - manga-net
+
+# ==================== 持久化卷 ====================
+volumes:
+  mysql-data:
+    driver: local
+  es-data:
+    driver: local
+  uploads:
+    driver: local
+
+# ==================== 网络 ====================
+networks:
+  manga-net:
+    driver: bridge

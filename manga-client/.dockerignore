@@ -1,0 +1,9 @@
+# ==================== Docker Build 忽略文件 ====================
+# 前端构建（node:18-alpine）
+
+node_modules/
+dist/
+.git/
+.vscode/
+nginx.conf
+Dockerfile
