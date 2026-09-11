@@ -86,6 +86,21 @@ public class UserController {
         return Result.ok();
     }
 
+    @PutMapping("/{id}/role")
+    @RequireRole
+    @Operation(summary = "设置用户角色（授予/撤销作者身份，管理员角色不可修改）")
+    public Result<?> setRole(@PathVariable Long id, @RequestParam Integer value) {
+        if (value == null || (value != 0 && value != 1)) {
+            throw new BusinessException("角色参数非法（0=用户 1=作者）");
+        }
+        User user = userService.getById(id);
+        if (user == null) throw new BusinessException("用户不存在");
+        if (user.getRole() == 2) throw new BusinessException("不能修改管理员角色");
+        user.setRole(value);
+        userService.updateById(user);
+        return Result.ok();
+    }
+
     @PutMapping("/password")
     @Operation(summary = "修改密码")
     public Result<?> changePassword(@RequestHeader("Authorization") String auth,

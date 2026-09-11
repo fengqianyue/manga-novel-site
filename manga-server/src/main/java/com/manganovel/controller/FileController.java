@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.manganovel.common.Result;
 import com.manganovel.security.JwtUtil;
 import com.manganovel.security.RequireRole;
+import com.manganovel.security.WorkOwnerChecker;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,8 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @RestController
@@ -27,9 +30,14 @@ public class FileController {
 
     private String basePath;
     private final JwtUtil jwtUtil;
+    private final WorkOwnerChecker ownerChecker;
 
-    public FileController(JwtUtil jwtUtil) {
+    /** 作者可用的上传目录模式：covers 或 manga/{作品ID} */
+    private static final Pattern AUTHOR_DIR = Pattern.compile("^(covers|manga/(\\d+))$");
+
+    public FileController(JwtUtil jwtUtil, WorkOwnerChecker ownerChecker) {
         this.jwtUtil = jwtUtil;
+        this.ownerChecker = ownerChecker;
     }
 
     @PostConstruct
@@ -54,11 +62,29 @@ public class FileController {
     }
 
     @PostMapping("/upload")
-    @RequireRole
-    @Operation(summary = "上传图片（管理员）")
-    public Result<Map<String, String>> upload(@RequestParam("file") MultipartFile file,
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "上传图片（作者限 covers / manga/自己作品ID）")
+    public Result<Map<String, String>> upload(@RequestHeader("Authorization") String auth,
+                                              @RequestParam("file") MultipartFile file,
                                               @RequestParam(defaultValue = "common") String dir) {
+        validateDir(auth, dir);
         return doUpload(file, dir);
+    }
+
+    /** 目录校验：杜绝路径穿越；作者仅可用白名单目录，漫画目录须为本人作品 */
+    private void validateDir(String auth, String dir) {
+        if (dir == null || dir.isBlank()) throw new BusinessException("非法上传目录");
+        String clean = dir.trim().replace("\\", "/");
+        if (clean.startsWith("/") || clean.contains("..") || clean.matches("^[a-zA-Z]:.*")) {
+            throw new BusinessException("非法上传目录");
+        }
+        int role = jwtUtil.getRole(auth.startsWith("Bearer ") ? auth.substring(7) : auth);
+        if (role >= 2) return; // 管理员不限制子目录
+        Matcher m = AUTHOR_DIR.matcher(clean);
+        if (!m.matches()) throw new BusinessException("不允许的上传目录");
+        if (m.group(2) != null) {
+            ownerChecker.check(Long.valueOf(m.group(2)), auth); // 只能传到自己的作品目录
+        }
     }
 
     private Result<Map<String, String>> doUpload(MultipartFile file, String dir) {
@@ -93,10 +119,12 @@ public class FileController {
     }
 
     @PostMapping("/upload/batch")
-    @RequireRole
-    @Operation(summary = "批量上传图片（管理员）")
-    public Result<List<Map<String, String>>> uploadBatch(@RequestParam("files") List<MultipartFile> files,
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "批量上传图片（作者限 covers / manga/自己作品ID）")
+    public Result<List<Map<String, String>>> uploadBatch(@RequestHeader("Authorization") String auth,
+                                                          @RequestParam("files") List<MultipartFile> files,
                                                           @RequestParam(defaultValue = "common") String dir) {
+        validateDir(auth, dir);
         List<Map<String, String>> results = new ArrayList<>();
         for (MultipartFile file : files) {
             if (file.isEmpty()) continue;

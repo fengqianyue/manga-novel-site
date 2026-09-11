@@ -5,6 +5,7 @@ import com.manganovel.common.Result;
 import com.manganovel.entity.Chapter;
 import com.manganovel.entity.NovelContent;
 import com.manganovel.security.RequireRole;
+import com.manganovel.security.WorkOwnerChecker;
 import com.manganovel.service.IChapterService;
 import com.manganovel.service.INovelContentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,13 +25,16 @@ public class NovelContentController {
 
     private final INovelContentService contentService;
     private final IChapterService chapterService;
+    private final WorkOwnerChecker ownerChecker;
 
     /** 匹配 "数字+空格+标题" 的章节点 */
     private static final Pattern CHAPTER_PAT = Pattern.compile("^(\\d+)\\s+(.+)$", Pattern.MULTILINE);
 
-    public NovelContentController(INovelContentService contentService, IChapterService chapterService) {
+    public NovelContentController(INovelContentService contentService, IChapterService chapterService,
+                                  WorkOwnerChecker ownerChecker) {
         this.contentService = contentService;
         this.chapterService = chapterService;
+        this.ownerChecker = ownerChecker;
     }
 
     @GetMapping("/{chapterId}")
@@ -42,20 +46,26 @@ public class NovelContentController {
     }
 
     @PostMapping("/save")
-    @RequireRole
-    @Operation(summary = "保存章节文本")
-    public Result<?> save(@RequestBody Map<String, Object> body) {
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "保存章节文本（作者须为作品属主）")
+    public Result<?> save(@RequestHeader("Authorization") String auth,
+                           @RequestBody Map<String, Object> body) {
         Long chapterId = Long.valueOf(body.get("chapterId").toString());
+        Chapter chapter = chapterService.getById(chapterId);
+        if (chapter == null) throw new BusinessException("章节不存在");
+        ownerChecker.check(chapter.getWorkId(), auth);
         String text = body.get("textContent").toString();
         contentService.saveContent(chapterId, text);
         return Result.ok();
     }
 
     @PostMapping("/import")
-    @RequireRole
-    @Operation(summary = "导入 TXT 并自动分章")
-    public Result<Map<String, Object>> importTxt(@RequestParam("file") MultipartFile file,
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "导入 TXT 并自动分章（作者须为作品属主）")
+    public Result<Map<String, Object>> importTxt(@RequestHeader("Authorization") String auth,
+                                                  @RequestParam("file") MultipartFile file,
                                                   @RequestParam Long workId) {
+        ownerChecker.check(workId, auth);
         if (file.isEmpty()) throw new BusinessException("文件为空");
         String content;
         try {

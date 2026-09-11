@@ -105,7 +105,15 @@ public class WorkController {
     }
 
     private void syncSearch(Work work) {
-        try { searchService.indexWork(work); } catch (Exception ignored) {}
+        try {
+            // 只有"上架且公开发布"的作品进入索引，其余状态从索引移除
+            if (work != null && work.getStatus() != null && work.getStatus() == 1
+                    && work.getIsPublic() != null && work.getIsPublic() == 1) {
+                searchService.indexWork(work);
+            } else if (work != null) {
+                searchService.deleteWork(work.getId());
+            }
+        } catch (Exception ignored) {}
     }
 
     @GetMapping("/{id}")
@@ -170,6 +178,31 @@ public class WorkController {
         work.setStatus(status);
         workService.updateById(work);
         syncSearch(workService.getById(id));
+        return Result.ok();
+    }
+
+    @PutMapping("/audit")
+    @RequireRole
+    @CacheEvict(value = {"workList", "workDetail", "ranking"}, allEntries = true)
+    @Operation(summary = "审核作品（通过→上架 / 驳回→填理由）")
+    public Result<?> audit(@RequestParam Long id,
+                            @RequestParam boolean pass,
+                            @RequestParam(required = false) String reason) {
+        Work work = workService.getById(id);
+        if (work == null) return Result.fail("作品不存在");
+        if (work.getStatus() == null || work.getStatus() != 2) {
+            return Result.fail("该作品不在待审核状态");
+        }
+        workService.lambdaUpdate()
+                .eq(Work::getId, id)
+                .set(Work::getStatus, pass ? 1 : 3)
+                .set(Work::getRejectReason, pass ? null : (reason == null ? "" : reason.trim()))
+                .update();
+        if (pass) {
+            syncSearch(workService.getById(id)); // 通过后进入搜索索引
+        } else {
+            searchService.deleteWork(id);
+        }
         return Result.ok();
     }
 

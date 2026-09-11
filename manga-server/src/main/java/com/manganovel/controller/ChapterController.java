@@ -1,8 +1,10 @@
 package com.manganovel.controller;
 
+import com.manganovel.common.BusinessException;
 import com.manganovel.common.Result;
 import com.manganovel.entity.Chapter;
 import com.manganovel.security.RequireRole;
+import com.manganovel.security.WorkOwnerChecker;
 import com.manganovel.service.IChapterService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,9 +19,11 @@ import java.util.List;
 public class ChapterController {
 
     private final IChapterService chapterService;
+    private final WorkOwnerChecker ownerChecker;
 
-    public ChapterController(IChapterService chapterService) {
+    public ChapterController(IChapterService chapterService, WorkOwnerChecker ownerChecker) {
         this.chapterService = chapterService;
+        this.ownerChecker = ownerChecker;
     }
 
     @GetMapping("/list/{workId}")
@@ -60,26 +64,38 @@ public class ChapterController {
     }
 
     @PostMapping
-    @RequireRole
-    @Operation(summary = "新增章节")
-    public Result<Long> add(@Valid @RequestBody Chapter chapter) {
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "新增章节（作者须为作品属主）")
+    public Result<Long> add(@RequestHeader("Authorization") String auth,
+                             @Valid @RequestBody Chapter chapter) {
+        if (chapter.getWorkId() == null) throw new BusinessException("缺少作品ID");
+        ownerChecker.check(chapter.getWorkId(), auth);
         chapter.setId(null);
         chapterService.save(chapter);
         return Result.ok(chapter.getId());
     }
 
     @PutMapping
-    @RequireRole
-    @Operation(summary = "修改章节")
-    public Result<?> update(@Valid @RequestBody Chapter chapter) {
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "修改章节（作者须为作品属主）")
+    public Result<?> update(@RequestHeader("Authorization") String auth,
+                             @Valid @RequestBody Chapter chapter) {
+        if (chapter.getId() == null) throw new BusinessException("缺少章节ID");
+        Chapter existing = chapterService.getById(chapter.getId());
+        if (existing == null) throw new BusinessException("章节不存在");
+        ownerChecker.check(existing.getWorkId(), auth);
+        chapter.setWorkId(existing.getWorkId());
         chapterService.updateById(chapter);
         return Result.ok();
     }
 
     @DeleteMapping("/{id}")
-    @RequireRole
-    @Operation(summary = "删除章节")
-    public Result<?> delete(@PathVariable Long id) {
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "删除章节（作者须为作品属主）")
+    public Result<?> delete(@RequestHeader("Authorization") String auth, @PathVariable Long id) {
+        Chapter existing = chapterService.getById(id);
+        if (existing == null) throw new BusinessException("章节不存在");
+        ownerChecker.check(existing.getWorkId(), auth);
         chapterService.removeById(id);
         return Result.ok();
     }
