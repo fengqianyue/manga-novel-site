@@ -58,7 +58,9 @@ public class UserWorkController {
     @Operation(summary = "我的书架")
     public Result<List<Work>> list(@RequestHeader("Authorization") String auth) {
         Long userId = jwtUtil.getUserId(auth.substring(7));
+        // 书架只展示私人导入作品，正式发布作品在作者中心管理
         List<Work> works = workService.lambdaQuery().eq(Work::getUserId, userId)
+                .eq(Work::getIsPublic, 0)
                 .eq(Work::getIsDeleted, 0).orderByDesc(Work::getCreatedAt).list();
         return Result.ok(works);
     }
@@ -70,6 +72,10 @@ public class UserWorkController {
         Work work = workService.getById(id);
         if (work == null || !userId.equals(work.getUserId())) {
             throw new BusinessException("无权操作");
+        }
+        // 正式发布作品不可通过书架入口删除，请在作者中心下架或联系管理员
+        if (work.getIsPublic() != null && work.getIsPublic() == 1) {
+            throw new BusinessException("正式发布作品请在作者中心管理");
         }
         // 删除所有关联数据（物理删除）
         List<Chapter> chapters = chapterService.lambdaQuery().eq(Chapter::getWorkId, id).list();
@@ -122,6 +128,7 @@ public class UserWorkController {
         work.setType("novel");
         work.setStatus(1);
         work.setUserId(userId);
+        work.setIsPublic(0); // 私人书架作品，不进入公共列表
         workService.save(work);
 
         // 按章节标记拆分
@@ -165,6 +172,7 @@ public class UserWorkController {
         Work work = new Work();
         work.setTitle(title); work.setAuthor(author); work.setType("manga"); work.setStatus(1);
         work.setUserId(userId);
+        work.setIsPublic(0); // 私人书架作品，不进入公共列表
         workService.save(work);
 
         Chapter ch = new Chapter(); ch.setWorkId(work.getId()); ch.setTitle("第1话"); ch.setChapterNum(1.0);

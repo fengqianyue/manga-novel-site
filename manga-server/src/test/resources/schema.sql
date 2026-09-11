@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS `work` (
   `type`         VARCHAR(20)  NOT NULL,
   `status`       INT          NOT NULL DEFAULT 0,
   `user_id`      BIGINT,
+  `is_public`    INT          NOT NULL DEFAULT 0,
+  `reject_reason` VARCHAR(500),
   `publish_year` INT,
   `completed`    INT          NOT NULL DEFAULT 0,
   `view_count`   BIGINT       NOT NULL DEFAULT 0,

@@ -48,10 +48,10 @@ public class UserController {
     }
 
     @PostMapping("/admin-login")
-    @Operation(summary = "管理员登录（仅 role=1 可登录）")
+    @Operation(summary = "管理员登录（仅 role=2 可登录）")
     public Result<LoginVO> adminLogin(@Valid @RequestBody LoginRequest request) {
         User user = userService.login(request);
-        if (user.getRole() != 1) {
+        if (user.getRole() != 2) {
             throw new BusinessException(403, "无管理员权限");
         }
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
@@ -80,7 +80,7 @@ public class UserController {
     public Result<?> toggleUser(@PathVariable Long id) {
         User user = userService.getById(id);
         if (user == null) throw new BusinessException("用户不存在");
-        if (user.getRole() == 1) throw new BusinessException("不能禁用管理员");
+        if (user.getRole() == 2) throw new BusinessException("不能禁用管理员");
         user.setIsDeleted(user.getIsDeleted() == 1 ? 0 : 1);
         userService.updateById(user);
         return Result.ok();

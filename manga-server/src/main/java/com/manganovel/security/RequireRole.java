@@ -6,6 +6,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface RequireRole {
-    /** 允许的角色：0=普通用户 1=管理员 */
-    int value() default 1;
+    /** 允许的最低角色：0=普通用户 1=作者 2=管理员 */
+    int value() default 2;
 }

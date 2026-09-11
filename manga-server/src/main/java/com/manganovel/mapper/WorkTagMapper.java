@@ -16,7 +16,7 @@ public interface WorkTagMapper extends BaseMapper<WorkTag> {
             "FROM work_tag wt1 " +
             "JOIN work_tag wt2 ON wt1.tag_id = wt2.tag_id AND wt1.work_id != wt2.work_id " +
             "JOIN work w ON wt2.work_id = w.id " +
-            "WHERE wt1.work_id = #{workId} AND w.status = 1 AND w.is_deleted = 0 AND w.user_id IS NULL " +
+            "WHERE wt1.work_id = #{workId} AND w.status = 1 AND w.is_deleted = 0 AND w.is_public = 1 " +
             "AND w.type = #{type} " +
             "GROUP BY w.id, w.title, w.author, w.cover_url, w.type, w.summary, w.publish_year, w.completed, w.view_count " +
             "ORDER BY match_count DESC " +

@@ -60,7 +60,7 @@ public class WorkController {
     public Result<List<Work>> ranking(@RequestParam(required = false) String type,
                                        @RequestParam(required = false, defaultValue = "false") boolean recent) {
         LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Work::getStatus, 1).isNull(Work::getUserId);
+        wrapper.eq(Work::getStatus, 1).eq(Work::getIsPublic, 1);
         if (org.springframework.util.StringUtils.hasText(type)) {
             wrapper.eq(Work::getType, type);
         }
@@ -154,6 +154,7 @@ public class WorkController {
         work.setSummary(dto.getSummary());
         work.setType(dto.getType());
         work.setStatus(dto.getStatus());
+        work.setIsPublic(1); // 管理员发布的作品默认为公开发布
         work.setPublishYear(dto.getPublishYear());
         work.setCompleted(dto.getCompleted());
         return work;

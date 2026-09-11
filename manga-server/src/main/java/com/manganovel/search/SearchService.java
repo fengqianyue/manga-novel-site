@@ -101,7 +101,7 @@ public class SearchService {
 
     private List<Long> mysqlSearch(String keyword) {
         LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Work::getStatus, 1);
+        wrapper.eq(Work::getStatus, 1).eq(Work::getIsPublic, 1);
         // 按空格拆分，每个词都去匹配 title 和 author
         String[] terms = keyword.trim().split("\\s+");
         wrapper.and(w -> {
@@ -124,6 +124,7 @@ public class SearchService {
             doc.put("author", work.getAuthor());
             doc.put("type", work.getType());
             doc.put("status", work.getStatus());
+            doc.put("isPublic", work.getIsPublic() == null ? 0 : work.getIsPublic());
             doc.put("summary", work.getSummary() == null ? "" : work.getSummary());
             doc.put("coverUrl", work.getCoverUrl() == null ? "" : work.getCoverUrl());
             HttpHeaders h = new HttpHeaders();
@@ -146,7 +147,8 @@ public class SearchService {
         if (!esAvailable) return;
         try { rest.delete(esUri + "/work"); } catch (Exception ignored) {}
         for (Work w : works) {
-            if (w.getStatus() != null && w.getStatus() == 1) indexWork(w);
+            if (w.getStatus() != null && w.getStatus() == 1
+                    && w.getIsPublic() != null && w.getIsPublic() == 1) indexWork(w);
         }
         log.info("ES 索引重建完成");
     }

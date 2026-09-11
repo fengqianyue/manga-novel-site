@@ -147,6 +147,7 @@ class WorkServiceImplTest {
         w.setType(type);
         w.setStatus(status);
         w.setUserId(userId);
+        w.setIsPublic(userId == null ? 1 : 0); // 管理员发布=公开，私人作品=书架
         w.setCompleted(0);
         w.setViewCount(0L);
         workService.save(w);

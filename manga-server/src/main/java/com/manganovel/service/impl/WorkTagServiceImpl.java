@@ -46,7 +46,7 @@ public class WorkTagServiceImpl extends ServiceImpl<WorkTagMapper, WorkTag> impl
             for (Map<String, Object> m : result) existingIds.add((Long) m.get("id"));
             com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Work> wq =
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-            wq.eq(Work::getStatus, 1).eq(Work::getType, type).isNull(Work::getUserId)
+            wq.eq(Work::getStatus, 1).eq(Work::getType, type).eq(Work::getIsPublic, 1)
               .notIn(!existingIds.isEmpty(), Work::getId, existingIds)
               .orderByDesc(Work::getCreatedAt)
               .last("LIMIT " + (limit - result.size()));

@@ -48,7 +48,8 @@ public class AdminStatsController {
         // 总量统计
         long totalUsers = userService.count();
         long totalWorks = workService.count();
-        long activeWorks = workService.lambdaQuery().eq(Work::getStatus, 1).isNull(Work::getUserId).count();
+        long activeWorks = workService.lambdaQuery().eq(Work::getStatus, 1).eq(Work::getIsPublic, 1).count();
+        long pendingAuditWorks = workService.lambdaQuery().eq(Work::getStatus, 2).eq(Work::getIsPublic, 1).count();
         long totalChapters = chapterService.count();
         long totalComments = commentService.count();
 
@@ -56,6 +57,7 @@ public class AdminStatsController {
         overview.put("totalUsers", totalUsers);
         overview.put("totalWorks", totalWorks);
         overview.put("activeWorks", activeWorks);
+        overview.put("pendingAuditWorks", pendingAuditWorks);
         overview.put("totalChapters", totalChapters);
         overview.put("totalComments", totalComments);
         data.put("overview", overview);
@@ -74,7 +76,7 @@ public class AdminStatsController {
         List<Map<String, Object>> allWorkTags = workTagService.listMaps(
             new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.manganovel.entity.WorkTag>()
                 .select("tag_id, count(*) as cnt")
-                .inSql("work_id", "SELECT id FROM work WHERE status = 1 AND user_id IS NULL")
+                .inSql("work_id", "SELECT id FROM work WHERE status = 1 AND is_public = 1")
                 .groupBy("tag_id")
                 .orderByDesc("cnt")
                 .last("LIMIT 10")

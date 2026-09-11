@@ -15,7 +15,7 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements IW
     @Override
     public Page<Work> pageByType(String type, int pageNum, int pageSize, String keyword) {
         LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Work::getStatus, 1).isNull(Work::getUserId); // 只展示公开作品
+        wrapper.eq(Work::getStatus, 1).eq(Work::getIsPublic, 1); // 只展示审核通过的公开作品
         if (StringUtils.hasText(type)) {
             wrapper.eq(Work::getType, type);
         }
@@ -43,7 +43,7 @@ public class WorkServiceImpl extends ServiceImpl<WorkMapper, Work> implements IW
     public Page<Work> pageWithFilter(String type, String keyword, Integer publishYear, Integer completed,
                                       Long tagId, Integer pageNum, Integer pageSize) {
         LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Work::getStatus, 1).isNull(Work::getUserId);
+        wrapper.eq(Work::getStatus, 1).eq(Work::getIsPublic, 1);
         if (StringUtils.hasText(type)) wrapper.eq(Work::getType, type);
         if (StringUtils.hasText(keyword))
             wrapper.and(w -> w.like(Work::getTitle, keyword).or().like(Work::getAuthor, keyword));
