@@ -6,6 +6,8 @@ import com.manganovel.security.RequireRole;
 import com.manganovel.service.ITagService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,6 +25,7 @@ public class TagController {
 
     @GetMapping("/list")
     @Operation(summary = "查询所有标签")
+    @Cacheable(value = "tags", key = "'all'")
     public Result<List<Tag>> list() {
         return Result.ok(tagService.list());
     }
@@ -30,6 +33,7 @@ public class TagController {
     @PostMapping
     @RequireRole
     @Operation(summary = "新增标签")
+    @CacheEvict(value = "tags", allEntries = true)
     public Result<?> add(@Valid @RequestBody Tag tag) {
         tag.setId(null);
         tagService.save(tag);
@@ -39,6 +43,7 @@ public class TagController {
     @DeleteMapping("/{id}")
     @RequireRole
     @Operation(summary = "删除标签")
+    @CacheEvict(value = "tags", allEntries = true)
     public Result<?> delete(@PathVariable Long id) {
         tagService.removeById(id);
         return Result.ok();

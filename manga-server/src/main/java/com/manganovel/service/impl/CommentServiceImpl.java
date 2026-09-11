@@ -9,6 +9,7 @@ import com.manganovel.mapper.UserMapper;
 import com.manganovel.service.ICommentService;
 import org.springframework.stereotype.Service;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> implements ICommentService {
@@ -25,9 +26,13 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 .eq(Comment::getWorkId, workId)
                 .orderByDesc(Comment::getCreatedAt)
                 .list();
+        // 批量加载用户，避免 N+1 查询
+        Set<Long> userIds = list.stream().map(Comment::getUserId).collect(Collectors.toSet());
+        Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
         List<Map<String, Object>> result = new ArrayList<>();
         for (Comment c : list) {
-            User u = userMapper.selectById(c.getUserId());
+            User u = userMap.get(c.getUserId());
             Map<String, Object> m = new HashMap<>();
             m.put("id", c.getId()); m.put("workId", c.getWorkId()); m.put("userId", c.getUserId());
             m.put("username", u != null ? u.getUsername() : "未知");

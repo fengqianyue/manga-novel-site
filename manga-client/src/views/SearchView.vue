@@ -2,12 +2,15 @@
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/api/request'
+import { useGoBack } from '@/composables/useGoBack'
 
 const route = useRoute()
 const router = useRouter()
 const keyword = ref('')
 const results = ref([])
 const loading = ref(false)
+
+const { goBack } = useGoBack()
 
 async function doSearch() {
   keyword.value = route.query.q || ''
@@ -19,8 +22,6 @@ async function doSearch() {
   } catch { /* ignore */ }
   finally { loading.value = false }
 }
-
-function goBack() { if (window.history.length > 1) router.back(); else router.push('/') }
 
 // 首次加载 + query 变化都触发
 doSearch()
@@ -66,15 +67,15 @@ watch(() => route.query.q, () => doSearch())
 </template>
 
 <style scoped>
-.search-page { min-height: 100vh; background: #f0f3f7; }
+.search-page { min-height: 100vh; background: var(--bg-page); }
 .search-bar {
   background: #fff; padding: 16px 32px;
   display: flex; align-items: center; gap: 16px;
   box-shadow: 0 1px 6px rgba(0,0,0,0.05);
 }
-.back-link { color: #8d56da; text-decoration: none; font-size: 14px; white-space: nowrap; }
+.back-link { color: var(--accent); text-decoration: none; font-size: 14px; white-space: nowrap; }
 .home-link { color: #888; text-decoration: none; font-size: 13px; margin-left: 4px; white-space: nowrap; }
-.home-link:hover { color: #8d56da; }
+.home-link:hover { color: var(--accent); }
 .search-input { max-width: 500px; }
 .search-results { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
 .result-count { color: #999; margin-bottom: 20px; }
@@ -91,4 +92,14 @@ watch(() => route.query.q, () => doSearch())
 .card-info { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
 .card-title { font-size: 14px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-author { font-size: 12px; color: #999; }
+
+/* ============================================ */
+/*  响应式适配                                    */
+/* ============================================ */
+@media (max-width: 767px) {
+  .search-bar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .search-input { max-width: 100%; }
+  .search-results { padding: 20px 12px; }
+  .result-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+}
 </style>

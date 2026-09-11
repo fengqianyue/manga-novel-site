@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Document, Tickets, PriceTag, Lock, Search } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Document, Tickets, PriceTag, Lock, Search, User, Menu } from '@element-plus/icons-vue'
 import { getWorkList, getWorkTags } from '@/api/work'
 import { adminLogin, addWork, updateWork, toggleWorkStatus, updateWorkTags } from '@/api/admin'
 import { getTags, addTag, deleteTag } from '@/api/admin'
@@ -94,6 +94,14 @@ function doAdminLogout() {
 
 // ========== 菜单 ==========
 const activeMenu = ref('works')
+// 移动端侧边栏开关
+const showSidebar = ref(false)
+
+// ====== 数据大屏 ======
+const dashData = ref(null)
+async function loadDashboard() {
+  try { const res = await request.get('/admin/stats/dashboard', { silent: true }); dashData.value = res.data } catch { /* */ }
+}
 
 // ========== 数据 ==========
 const works = ref([])
@@ -126,14 +134,15 @@ const chapterForm = ref({ title: '', chapterNum: 0 })
 const newTagName = ref('')
 
 async function loadAll() {
-  const params = { pageSize: 100 }
-  if (workStatusFilter.value !== null) params.status = workStatusFilter.value
-  if (workSearch.value) params.keyword = workSearch.value
-  // 管理员专用列表接口
-  const res = await request.get('/work/admin-list', { params, silent: true })
-  works.value = res.data.records
-  const tagRes = await getTags()
-  allTags.value = tagRes.data
+  try {
+    const params = { pageSize: 100 }
+    if (workStatusFilter.value !== null) params.status = workStatusFilter.value
+    if (workSearch.value) params.keyword = workSearch.value
+    const res = await request.get('/work/admin-list', { params, silent: true })
+    works.value = res.data.records
+    const tagRes = await getTags()
+    allTags.value = tagRes.data
+  } catch { /* API 失败时静默，避免 admin 面板崩溃 */ }
 }
 
 function onStatusFilter(val) { workStatusFilter.value = val; loadAll() }
@@ -341,7 +350,7 @@ async function doDeleteTag(tag) {
     <template v-if="!userStore.isAdminAuth">
       <div class="admin-login-page">
         <div class="admin-login-card">
-          <div class="admin-login-icon"><el-icon :size="40" color="#8d56da"><Lock /></el-icon></div>
+          <div class="admin-login-icon"><el-icon :size="40" color="var(--accent)"><Lock /></el-icon></div>
           <h2>管理后台</h2>
           <el-form :model="loginForm" label-position="top" @keyup.enter="doAdminLogin">
             <el-form-item label="管理员账号">
@@ -359,13 +368,21 @@ async function doDeleteTag(tag) {
 
     <!-- ====== 已登录：正常后台 ====== -->
     <template v-else>
-      <aside class="admin-sidebar">
+      <!-- 移动端汉堡菜单按钮 -->
+      <div class="mobile-topbar">
+        <el-button :icon="Menu" circle @click="showSidebar = !showSidebar" class="hamburger-btn" />
+        <span class="mobile-title">管理后台</span>
+      </div>
+      <!-- 移动端遮罩层 -->
+      <div v-if="showSidebar" class="sidebar-overlay" @click="showSidebar = false"></div>
+      <aside class="admin-sidebar" :class="{ 'sidebar-open': showSidebar }">
         <h2 class="admin-logo">⚙ 管理后台</h2>
-        <el-menu :default-active="activeMenu" @select="activeMenu = $event" background-color="#2a2a2a" text-color="#bbb" active-text-color="#8d56da">
+        <el-menu :default-active="activeMenu" @select="activeMenu = $event" background-color="#2a2a2a" text-color="#bbb" active-text-color="var(--accent)">
+          <el-menu-item index="dashboard" @click="loadDashboard"><el-icon><Lock /></el-icon> 数据大屏</el-menu-item>
           <el-menu-item index="works"><el-icon><Document /></el-icon> 作品管理</el-menu-item>
           <el-menu-item index="chapters"><el-icon><Tickets /></el-icon> 章节管理</el-menu-item>
           <el-menu-item index="tags"><el-icon><PriceTag /></el-icon> 标签管理</el-menu-item>
-          <el-menu-item index="users" @click="loadUsers"><el-icon><el-icon><User /></el-icon></el-icon> 用户管理</el-menu-item>
+          <el-menu-item index="users" @click="loadUsers"><el-icon><User /></el-icon> 用户管理</el-menu-item>
         </el-menu>
         <div class="sidebar-footer">
           <p class="sidebar-user">{{ userStore.adminUser?.username }}</p>
@@ -375,6 +392,68 @@ async function doDeleteTag(tag) {
       </aside>
 
       <main class="admin-main">
+        <!-- 数据大屏 -->
+        <template v-if="activeMenu === 'dashboard'">
+          <div class="section-header"><h3>📊 数据大屏</h3></div>
+          <div v-if="dashData" class="dash-container">
+
+            <!-- 概览卡片 -->
+            <div class="dash-cards">
+              <div class="dash-card"><span class="dc-num">{{ dashData.overview.totalUsers }}</span><span class="dc-label">用户总数</span></div>
+              <div class="dash-card"><span class="dc-num">{{ dashData.overview.totalWorks }}</span><span class="dc-label">作品总数</span></div>
+              <div class="dash-card"><span class="dc-num">{{ dashData.overview.activeWorks }}</span><span class="dc-label">上架作品</span></div>
+              <div class="dash-card"><span class="dc-num">{{ dashData.overview.totalChapters }}</span><span class="dc-label">章节总数</span></div>
+              <div class="dash-card"><span class="dc-num">{{ dashData.overview.totalComments }}</span><span class="dc-label">评论总数</span></div>
+            </div>
+
+            <div class="dash-charts">
+              <!-- 类型分布 -->
+              <div class="dash-panel">
+                <h4>作品类型分布</h4>
+                <div class="type-bars">
+                  <div class="type-bar-row">
+                    <span class="bar-label">漫画</span>
+                    <div class="bar-track"><div class="bar-fill" :style="{ width: dashData.overview.totalWorks > 0 ? (dashData.typeDistribution.manga / dashData.overview.totalWorks * 100) + '%' : '0%' }"></div></div>
+                    <span class="bar-val">{{ dashData.typeDistribution.manga }}</span>
+                  </div>
+                  <div class="type-bar-row">
+                    <span class="bar-label">小说</span>
+                    <div class="bar-track"><div class="bar-fill bar-novel" :style="{ width: dashData.overview.totalWorks > 0 ? (dashData.typeDistribution.novel / dashData.overview.totalWorks * 100) + '%' : '0%' }"></div></div>
+                    <span class="bar-val">{{ dashData.typeDistribution.novel }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 热门标签 -->
+              <div class="dash-panel">
+                <h4>热门标签 Top 10</h4>
+                <div v-if="dashData.hotTags.length" class="tag-bars">
+                  <div v-for="(t, i) in dashData.hotTags" :key="i" class="tag-bar-row">
+                    <span class="bar-label" style="width:80px">{{ t.name }}</span>
+                    <div class="bar-track"><div class="bar-fill bar-purple" :style="{ width: t.value / dashData.hotTags[0].value * 100 + '%' }"></div></div>
+                    <span class="bar-val">{{ t.value }}</span>
+                  </div>
+                </div>
+                <div v-else class="dash-empty">暂无数据</div>
+              </div>
+            </div>
+
+            <!-- 近7日趋势 -->
+            <div class="dash-panel dash-trend">
+              <h4>近7日新增作品</h4>
+              <div class="trend-bars">
+                <div v-for="(d, i) in dashData.recentTrend" :key="i" class="trend-bar-item">
+                  <div class="trend-bar" :style="{ height: d.count * 20 + 'px', minHeight: d.count > 0 ? '4px' : '1px' }"></div>
+                  <span class="trend-label">{{ d.date }}</span>
+                  <span class="trend-val">{{ d.count }}</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <div v-else-if="activeMenu === 'dashboard'" class="dash-loading">加载中...</div>
+        </template>
+
         <!-- 作品管理 -->
         <template v-if="activeMenu === 'works'">
           <div class="section-header"><h3>作品管理</h3></div>
@@ -487,7 +566,7 @@ async function doDeleteTag(tag) {
         <el-form-item label="封面">
           <el-upload
             class="cover-upload"
-            :action="'/api/file/upload?dir=covers'"
+            :action="'/file/upload?dir=covers'"
             :headers="uploadHeaders"
             :show-file-list="false"
             :before-upload="beforeCoverUpload"
@@ -551,7 +630,7 @@ async function doDeleteTag(tag) {
         <template v-if="selectedWork?.type !== 'novel'">
           <el-form-item label="上传图片（选填，可多选）">
             <el-upload
-              :action="'/api/file/upload?dir=manga/'+(selectedWork?.id||0)"
+              :action="'/file/upload?dir=manga/'+(selectedWork?.id||0)"
               :headers="uploadHeaders"
               multiple
               :show-file-list="false"
@@ -601,7 +680,7 @@ async function doDeleteTag(tag) {
         </el-row>
         <el-form-item label="追加图片（选填）">
           <el-upload
-            :action="'/api/file/upload?dir=manga/'+(selectedWork?.id||0)"
+            :action="'/file/upload?dir=manga/'+(selectedWork?.id||0)"
             :headers="uploadHeaders"
             multiple
             :show-file-list="false"
@@ -635,7 +714,7 @@ async function doDeleteTag(tag) {
         上传 TXT 文件，系统自动识别章节标记（如"1 标题"）并拆分
       </p>
       <el-upload
-        :action="'/api/novel-content/import?workId='+(selectedWork?.id||0)"
+        :action="'/novel-content/import?workId='+(selectedWork?.id||0)"
         :headers="uploadHeaders"
         :show-file-list="true"
         :limit="1"
@@ -669,7 +748,7 @@ async function doDeleteTag(tag) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0f3f7;
+  background: var(--bg-page);
   width: 100%;
 }
 .admin-login-card {
@@ -685,13 +764,13 @@ async function doDeleteTag(tag) {
 .admin-login-tip { text-align: center; margin-top: 14px; font-size: 12px; color: #bbb; }
 
 /* ====== 管理布局 ====== */
-.admin-layout { display: flex; min-height: 100vh; background: #f0f3f7; }
+.admin-layout { display: flex; min-height: 100vh; background: var(--bg-page); }
 .admin-sidebar { width: 200px; background: #2a2a2a; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
 .admin-logo { color: #fff; font-size: 16px; padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 .sidebar-footer { margin-top: auto; padding: 20px; border-top: 1px solid rgba(255,255,255,0.08); }
 .sidebar-footer a { color: #888; font-size: 13px; text-decoration: none; display: block; }
-.sidebar-footer a:hover { color: #8d56da; }
-.sidebar-user { color: #8d56da; font-size: 14px; margin-bottom: 8px; }
+.sidebar-footer a:hover { color: var(--accent); }
+.sidebar-user { color: var(--accent); font-size: 14px; margin-bottom: 8px; }
 .admin-main { flex: 1; margin-left: 200px; padding: 32px 36px; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .section-header h3 { font-size: 18px; color: #333; }
@@ -700,7 +779,7 @@ async function doDeleteTag(tag) {
 .chapter-work-list h4 { margin-bottom: 12px; color: #555; }
 .work-select-item { padding: 10px 14px; margin-bottom: 6px; background: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
 .work-select-item:hover { background: #e9e0f5; }
-.work-select-item.active { background: #8d56da; color: #fff; }
+.work-select-item.active { background: var(--accent); color: #fff; }
 .chapter-detail { flex: 1; }
 .empty-tip { color: #999; padding: 60px 0; text-align: center; }
 .tag-create { display: flex; gap: 12px; margin-bottom: 20px; }
@@ -728,4 +807,130 @@ async function doDeleteTag(tag) {
 .preview-item { position: relative; width: 80px; height: 110px; }
 .preview-thumb { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
 .preview-remove { position: absolute; top: -6px; right: -6px; background: #d50707; color: #fff; border-radius: 50%; cursor: pointer; font-size: 14px; padding: 2px; }
+
+/* ============================================ */
+/*  移动端汉堡菜单                               */
+/* ============================================ */
+.mobile-topbar { display: none; }
+.sidebar-overlay { display: none; }
+
+/* ============================================ */
+/*  响应式适配 - 手机端 (< 768px)               */
+/* ============================================ */
+@media (max-width: 767px) {
+  /* 登录页 */
+  .admin-login-card { width: 90vw; padding: 36px 24px 28px; }
+
+  /* 移动端顶部栏 */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; background: #2a2a2a; position: sticky; top: 0; z-index: 60;
+  }
+  .mobile-title { color: #fff; font-size: 15px; }
+  .hamburger-btn { background: transparent !important; border-color: rgba(255,255,255,0.2) !important; color: #fff !important; }
+
+  /* 遮罩 */
+  .sidebar-overlay {
+    display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 55;
+  }
+
+  /* 侧边栏 - 默认隐藏，点击汉堡图标滑出 */
+  .admin-sidebar {
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 58;
+  }
+  .admin-sidebar.sidebar-open { transform: translateX(0); }
+
+  /* 主内容区无左边距 */
+  .admin-main {
+    margin-left: 0 !important; padding: 16px 12px;
+  }
+
+  /* 筛选+搜索行折行 */
+  .section-header { flex-wrap: wrap; gap: 8px; }
+  .section-header + div[style] {
+    flex-wrap: wrap !important; gap: 8px !important;
+  }
+
+  /* 表格横向滚动 */
+  :deep(.el-table) { display: block; overflow-x: auto; white-space: nowrap; }
+
+  /* 章节布局堆叠 */
+  .chapter-layout { flex-direction: column; gap: 16px; }
+  .chapter-work-list { width: 100%; }
+
+  /* 弹窗全屏或缩小 */
+  :deep(.el-dialog) { width: 95vw !important; margin: 10px auto !important; }
+  :deep(.el-dialog__body) { padding: 16px !important; }
+
+  /* 表单行堆叠 */
+  :deep(.el-row) .el-col { max-width: 100% !important; flex: 0 0 100% !important; margin-bottom: 6px; }
+
+  /* 上传预览响应式 */
+  .upload-preview { gap: 8px; }
+  .preview-item { width: 60px; height: 85px; }
+
+  /* 漫画页预览网格 */
+  .pages-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+
+  /* 作品选择列表 */
+  .work-select-item { font-size: 13px; padding: 8px 12px; }
+
+  /* 封面上传 */
+  .cover-preview { max-width: 140px; max-height: 110px; }
+
+  /* 底部边距 */
+  .admin-main { padding-bottom: 40px; }
+}
+
+/* ============================================ */
+/*  平板适配 (768px - 1024px)                    */
+/* ============================================ */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .admin-main { padding: 24px 20px; }
+  .chapter-layout { gap: 20px; }
+  .chapter-work-list { width: 180px; }
+  :deep(.el-dialog) { width: 90vw !important; }
+}
+
+/* ============================================ */
+/*  数据大屏                                     */
+/* ============================================ */
+.dash-loading { text-align: center; padding: 80px 0; color: #999; }
+.dash-container { max-width: 1000px; }
+.dash-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+.dash-card { background: #fff; border-radius: 10px; padding: 18px 12px; text-align: center; box-shadow: 0 1px 6px rgba(0,0,0,0.05); }
+.dc-num { display: block; font-size: 26px; font-weight: 700; color: var(--accent); }
+.dc-label { display: block; font-size: 12px; color: #999; margin-top: 4px; }
+.dash-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+.dash-panel { background: #fff; border-radius: 10px; padding: 18px 20px; box-shadow: 0 1px 6px rgba(0,0,0,0.05); }
+.dash-panel h4 { font-size: 14px; color: #555; margin-bottom: 14px; }
+.dash-empty { text-align: center; color: #ccc; padding: 20px 0; }
+
+/* 横条进度图 */
+.type-bars, .tag-bars { display: flex; flex-direction: column; gap: 10px; }
+.type-bar-row, .tag-bar-row { display: flex; align-items: center; gap: 8px; }
+.bar-label { font-size: 12px; color: #777; min-width: 30px; }
+.bar-track { flex: 1; height: 18px; background: #f0f0f0; border-radius: 9px; overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); border-radius: 9px; transition: width 0.6s; min-width: 2px; }
+.bar-novel { background: linear-gradient(90deg, #67c23a, #85ce61); }
+.bar-purple { background: linear-gradient(90deg, var(--accent), var(--accent-light)); }
+.bar-val { font-size: 12px; color: #999; min-width: 24px; text-align: right; }
+
+/* 趋势图 */
+.trend-bars { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; height: 100px; padding-top: 20px; }
+.trend-bar-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.trend-bar { width: 28px; background: linear-gradient(180deg, var(--accent), var(--accent-light)); border-radius: 4px 4px 0 0; min-height: 1px; transition: height 0.5s; }
+.trend-label { font-size: 10px; color: #999; }
+.trend-val { font-size: 10px; color: var(--accent); font-weight: 600; }
+
+@media (max-width: 767px) {
+  .dash-cards { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .dash-charts { grid-template-columns: 1fr; }
+  .dash-card { padding: 12px 8px; }
+  .dc-num { font-size: 20px; }
+  .trend-bar { width: 20px; }
+}
 </style>

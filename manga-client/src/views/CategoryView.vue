@@ -2,13 +2,14 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import request from '@/api/request'
+import { useGoBack } from '@/composables/useGoBack'
 
 const router = useRouter()
 const route = useRoute()
 const works = ref([])
 const tags = ref([])
 const loading = ref(true)
-const page = ref(1)
+const page = ref(Number(route.query.page) || 1)
 const total = ref(0)
 const pageSize = 24
 
@@ -19,8 +20,11 @@ const filters = ref({
   completed: route.query.completed ? Number(route.query.completed) : null,
   tagId: route.query.tagId ? Number(route.query.tagId) : null,
 })
-const yearOptions = []
-for (let y = new Date().getFullYear(); y >= 2000; y--) yearOptions.push(y)
+const yearOptions = computed(() => {
+  const years = []
+  for (let y = new Date().getFullYear(); y >= 2000; y--) years.push(y)
+  return years
+})
 
 onMounted(async () => {
   try { const res = await request.get('/tag/list'); tags.value = res.data || [] } catch { /* */ }
@@ -29,6 +33,8 @@ onMounted(async () => {
 
 async function loadWorks() {
   loading.value = true
+  // 页码同步到 URL，返回时能恢复
+  router.replace({ query: { ...route.query, page: page.value } })
   const p = { pageNum: page.value, pageSize }
   if (filters.value.type) p.type = filters.value.type
   if (filters.value.keyword) p.keyword = filters.value.keyword
@@ -45,7 +51,8 @@ async function loadWorks() {
 watch([() => filters.value.type, () => filters.value.completed, () => filters.value.publishYear],
   () => { page.value = 1; loadWorks() })
 
-function goBack() { if (window.history.length > 1) router.back(); else router.push('/') }
+const { goBack } = useGoBack()
+
 function doSearch() { page.value = 1; loadWorks() }
 function clearFilters() {
   filters.value = { type: '', keyword: '', publishYear: null, completed: null, tagId: null }
@@ -63,7 +70,7 @@ function clearFilters() {
       <div class="top-search">
         <el-input v-model="filters.keyword" placeholder="搜索作品、作者..."
           size="default" clearable @keyup.enter="doSearch" @clear="doSearch">
-          <template #prefix><span style="color:#8d56da">🔍</span></template>
+          <template #prefix><span style="color:var(--accent)">🔍</span></template>
         </el-input>
       </div>
     </header>
@@ -148,9 +155,9 @@ function clearFilters() {
   display: flex; align-items: center; gap: 20px;
   border-bottom: 1px solid #e8e8e8; position: sticky; top: 0; z-index: 20;
 }
-.top-back { color: #8d56da; text-decoration: none; font-size: 13px; white-space: nowrap; }
+.top-back { color: var(--accent); text-decoration: none; font-size: 13px; white-space: nowrap; }
 .top-home { color: #888; text-decoration: none; font-size: 12px; margin-left: 4px; white-space: nowrap; }
-.top-home:hover { color: #8d56da; }
+.top-home:hover { color: var(--accent); }
 .cat-top h2 { font-size: 17px; color: #222; font-weight: 600; margin: 0; }
 .top-search { width: 280px; margin-left: auto; }
 
@@ -171,16 +178,16 @@ function clearFilters() {
   color: #666; background: #fff; border: 1px solid #e0e0e0;
   transition: all 0.2s;
 }
-.aside-opts span:hover { color: #8d56da; border-color: #8d56da; }
-.aside-opts span.on { background: #8d56da; color: #fff; border-color: #8d56da; }
+.aside-opts span:hover { color: var(--accent); border-color: var(--accent); }
+.aside-opts span.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 5px; }
 .tag-cloud span {
   padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
   color: #888; background: #f5f5f5; transition: all 0.2s;
 }
-.tag-cloud span:hover { color: #8d56da; }
-.tag-cloud span.on { background: #ede4f7; color: #8d56da; font-weight: 600; }
+.tag-cloud span:hover { color: var(--accent); }
+.tag-cloud span.on { background: #ede4f7; color: var(--accent); font-weight: 600; }
 
 .aside-clear { font-size: 11px; color: #bbb; cursor: pointer; }
 .aside-clear:hover { color: #d50707; }
@@ -213,7 +220,7 @@ function clearFilters() {
 .dummy-icon { font-size: 36px; opacity: 0.5; }
 
 .badge-type {
-  position: absolute; top: 8px; left: 8px; background: #8d56da; color: #fff;
+  position: absolute; top: 8px; left: 8px; background: var(--accent); color: #fff;
   font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
 }
 .badge-done {
@@ -229,4 +236,26 @@ function clearFilters() {
 
 .empty-state { text-align: center; color: #bbb; padding: 80px 0; font-size: 16px; }
 .page-row { display: flex; justify-content: center; margin-top: 40px; }
+
+/* ============================================ */
+/*  响应式适配                                    */
+/* ============================================ */
+@media (max-width: 767px) {
+  .cat-top { padding: 10px 12px; flex-wrap: wrap; gap: 8px; }
+  .cat-top h2 { font-size: 15px; }
+  .top-search { width: 100%; }
+  .cat-body { flex-direction: column; }
+  .cat-aside {
+    width: 100%; position: static; height: auto; border-right: none;
+    border-bottom: 1px solid #e8e8e8; padding: 12px 16px; overflow-y: visible;
+  }
+  .aside-card { margin-bottom: 14px; }
+  .cat-main { padding: 16px 12px 40px; }
+  .work-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .cat-aside { width: 160px; }
+  .cat-main { padding: 20px 16px 40px; }
+}
 </style>

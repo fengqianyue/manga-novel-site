@@ -94,6 +94,7 @@ public class SearchService {
             return ids;
         } catch (Exception e) {
             log.warn("ES 搜索异常，降级 MySQL: {}", e.getMessage());
+            esAvailable = false; // ES 不可用时标记，避免后续请求重复超时
             return mysqlSearch(keyword);
         }
     }

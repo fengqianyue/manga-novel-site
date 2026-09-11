@@ -23,8 +23,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 使用绝对路径，确保 Tomcat 不会去临时目录找文件
-        String absolutePath = new File(uploadPath).getAbsolutePath();
+        // 优先使用绝对路径配置，否则基于当前目录解析（注意：不同部署方式可能导致路径不一致）
+        File uploadDir = new File(uploadPath);
+        String absolutePath = uploadDir.isAbsolute() ? uploadPath : new File(uploadPath).getAbsolutePath();
         if (!absolutePath.endsWith(File.separator)) {
             absolutePath += File.separator;
         }

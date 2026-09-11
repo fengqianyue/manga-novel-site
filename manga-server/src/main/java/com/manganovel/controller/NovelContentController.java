@@ -88,7 +88,7 @@ public class NovelContentController {
 
         int count = 0;
         for (int i = 0; i < boundaries.size(); i++) {
-            int start = i == 0 ? boundaries.get(i)[0] : boundaries.get(i)[0];
+            int start = boundaries.get(i)[0];
             int end = (i < boundaries.size() - 1) ? boundaries.get(i + 1)[0] : content.length();
             String chapterText = content.substring(start, end).trim();
 

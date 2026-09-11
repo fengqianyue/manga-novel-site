@@ -12,6 +12,8 @@ import com.manganovel.service.IWorkService;
 import com.manganovel.service.IWorkTagService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,6 +37,7 @@ public class WorkController {
 
     @GetMapping("/list")
     @Operation(summary = "分页查询作品列表")
+    @Cacheable(value = "workList", key = "#type + '_' + #keyword + '_' + #pageNum + '_' + #pageSize")
     public Result<Page<Work>> list(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String keyword,
@@ -53,6 +56,7 @@ public class WorkController {
 
     @GetMapping("/ranking")
     @Operation(summary = "排行榜（按浏览数，支持近三个月筛选）")
+    @Cacheable(value = "ranking", key = "#type + '_' + #recent")
     public Result<List<Work>> ranking(@RequestParam(required = false) String type,
                                        @RequestParam(required = false, defaultValue = "false") boolean recent) {
         LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
@@ -105,20 +109,22 @@ public class WorkController {
 
     @GetMapping("/{id}")
     @Operation(summary = "查询作品详情")
+    @Cacheable(value = "workDetail", key = "#id")
     public Result<Work> detail(@PathVariable Long id) {
         Work work = workService.getById(id);
         if (work == null) {
             return Result.fail("作品不存在");
         }
-        // 浏览数 +1
+        // 浏览数原子 +1（避免读-改-写竞态）
+        workService.lambdaUpdate().setSql("view_count = view_count + 1").eq(Work::getId, id).update();
         work.setViewCount((work.getViewCount() == null ? 0 : work.getViewCount()) + 1);
-        workService.updateById(work);
         return Result.ok(work);
     }
 
     @PostMapping
     @RequireRole
     @Operation(summary = "新增作品")
+    @CacheEvict(value = {"workList", "ranking"}, allEntries = true)
     public Result<Long> add(@Valid @RequestBody WorkSaveDTO dto) {
         Work work = toEntity(dto);
         work.setId(null);
@@ -130,6 +136,7 @@ public class WorkController {
     @PutMapping
     @RequireRole
     @Operation(summary = "修改作品")
+    @CacheEvict(value = {"workList", "workDetail", "ranking"}, allEntries = true)
     public Result<?> update(@Valid @RequestBody WorkSaveDTO dto) {
         Work work = toEntity(dto);
         workService.updateById(work);
@@ -154,6 +161,7 @@ public class WorkController {
     @PutMapping("/status")
     @RequireRole
     @Operation(summary = "上架/下架作品")
+    @CacheEvict(value = {"workList", "workDetail", "ranking"}, allEntries = true)
     public Result<?> toggleStatus(@RequestParam Long id, @RequestParam Integer status) {
         Work work = new Work();
         work.setId(id);

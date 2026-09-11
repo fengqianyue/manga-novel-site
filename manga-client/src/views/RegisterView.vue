@@ -92,7 +92,7 @@ async function doRegister() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0f3f7;
+  background: var(--bg-page);
 }
 .register-card {
   background: #fff;
@@ -120,7 +120,7 @@ async function doRegister() {
   color: #999;
 }
 .login-tip a {
-  color: #8d56da;
+  color: var(--accent);
   cursor: pointer;
 }
 .register-success {

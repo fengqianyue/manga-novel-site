@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/api/manga-page")
@@ -35,13 +36,15 @@ public class MangaPageController {
         Long chapterId = Long.valueOf(body.get("chapterId").toString());
         @SuppressWarnings("unchecked")
         List<String> urls = (List<String>) body.get("imageUrls");
+        List<MangaPage> pages = new ArrayList<>();
         for (int i = 0; i < urls.size(); i++) {
             MangaPage page = new MangaPage();
             page.setChapterId(chapterId);
             page.setPageNum(i + 1);
             page.setImageUrl(urls.get(i));
-            mangaPageService.save(page);
+            pages.add(page);
         }
+        mangaPageService.saveBatch(pages);
         return Result.ok();
     }
 

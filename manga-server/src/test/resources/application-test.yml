@@ -1,0 +1,29 @@
+# ==================== 测试环境配置 ====================
+# 使用 H2 内存数据库，不影响开发/生产环境
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:manga_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=USER
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+jwt:
+  secret: test-jwt-secret-key-for-unit-tests-only
+  expiration: 604800000
+
+app:
+  upload-path: uploads/
+  es:
+    uri: http://localhost:9999  # 测试环境不启动 ES，搜索自动降级

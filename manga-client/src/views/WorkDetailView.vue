@@ -7,6 +7,7 @@ import { getWorkDetail, getWorkTags } from '@/api/work'
 import { getChapters } from '@/api/admin'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
+import { useGoBack } from '@/composables/useGoBack'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +24,8 @@ const isFav = ref(false)
 const progress = ref(null)
 const favLoading = ref(false)
 
+const { goBack } = useGoBack()
+
 const coverUrl = computed(() => {
   if (work.value?.coverUrl) return '/uploads/' + work.value.coverUrl
   return null
@@ -30,14 +33,19 @@ const coverUrl = computed(() => {
 
 async function loadWorkData(wid) {
   work.value = null; chapters.value = []; tags.value = []; recommends.value = []
-  const [workRes, tagRes, chRes] = await Promise.all([
-    getWorkDetail(wid),
-    getWorkTags(wid),
-    getChapters(wid),
-  ])
-  work.value = workRes.data
-  tags.value = tagRes.data
-  chapters.value = chRes.data
+  try {
+    const [workRes, tagRes, chRes] = await Promise.all([
+      getWorkDetail(wid),
+      getWorkTags(wid),
+      getChapters(wid),
+    ])
+    work.value = workRes.data
+    tags.value = tagRes.data
+    chapters.value = chRes.data
+  } catch {
+    router.push('/')
+    return
+  }
 
   try {
     const recRes = await request.get('/work/recommend/' + wid, { silent: true })
@@ -84,8 +92,6 @@ async function toggleFavorite() {
   } catch { /* 忽略 */ }
   finally { favLoading.value = false }
 }
-
-function goBack() { if (window.history.length > 1) router.back(); else router.push('/') }
 
 async function loadComments() {
   try { const res = await request.get('/comment/list/' + route.params.id, { silent: true }); comments.value = res.data || [] } catch { /* */ }
@@ -255,7 +261,7 @@ function startReading(chapterId, pageNum) {
 <style scoped>
 .detail-page {
   min-height: 100vh;
-  background: #f0f3f7;
+  background: var(--bg-page);
 }
 
 /* 导航条 */
@@ -270,9 +276,9 @@ function startReading(chapterId, pageNum) {
   top: 0;
   z-index: 10;
 }
-.bar-back { color: #8d56da; text-decoration: none; font-size: 14px; }
+.bar-back { color: var(--accent); text-decoration: none; font-size: 14px; }
 .bar-home { color: #888; text-decoration: none; font-size: 13px; margin-left: 4px; }
-.bar-home:hover { color: #8d56da; }
+.bar-home:hover { color: var(--accent); }
 .bar-title { font-size: 16px; font-weight: 600; color: #333; }
 
 /* 主容器 */
@@ -321,7 +327,7 @@ function startReading(chapterId, pageNum) {
 .info-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 .tag-chip { cursor: pointer; }
 .tag-chip:hover { opacity: 0.8; }
-.info-year { display: inline-block; margin-left: 8px; padding: 1px 10px; background: #ede4f7; color: #8d56da; border-radius: 10px; font-size: 12px; cursor: pointer; }
+.info-year { display: inline-block; margin-left: 8px; padding: 1px 10px; background: #ede4f7; color: var(--accent); border-radius: 10px; font-size: 12px; cursor: pointer; }
 .info-year:hover { background: #dcccf2; }
 .info-completed { display: inline-block; margin-left: 6px; padding: 1px 10px; background: #e8f5e9; color: #4caf50; border-radius: 10px; font-size: 12px; cursor: pointer; }
 .info-completed:hover { background: #c8e6c9; }
@@ -352,7 +358,7 @@ function startReading(chapterId, pageNum) {
   transition: background 0.2s;
 }
 .chapter-item:hover { background: #e9e0f5; }
-.ch-num { font-size: 15px; font-weight: 600; color: #8d56da; width: 80px; }
+.ch-num { font-size: 15px; font-weight: 600; color: var(--accent); width: 80px; }
 .ch-title { flex: 1; font-size: 14px; color: #555; }
 .ch-arrow { color: #ccc; font-size: 14px; }
 
@@ -379,7 +385,7 @@ function startReading(chapterId, pageNum) {
 .rec-info { padding: 10px 12px 14px; pointer-events: none; }
 .rec-title { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
 .rec-author { font-size: 11px; color: #aaa; margin-bottom: 6px; }
-.rec-tag { font-size: 10px; background: #ede4f7; color: #8d56da; padding: 1px 6px; border-radius: 8px; }
+.rec-tag { font-size: 10px; background: #ede4f7; color: var(--accent); padding: 1px 6px; border-radius: 8px; }
 
 .comment-section { max-width: 1000px; margin: 0 auto 60px; padding: 0 32px; }
 .comment-section h3 { font-size: 18px; color: #333; margin-bottom: 18px; }
@@ -391,7 +397,7 @@ function startReading(chapterId, pageNum) {
 .cmt-avatar-dummy { width: 100%; height: 100%; background: #e8e8e8; border-radius: 50%; }
 .comment-body { flex: 1; min-width: 0; }
 .comment-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.comment-user { font-size: 13px; font-weight: 600; color: #8d56da; }
+.comment-user { font-size: 13px; font-weight: 600; color: var(--accent); }
 .comment-time { font-size: 11px; color: #ccc; }
 .comment-content { font-size: 14px; color: #444; line-height: 1.7; word-break: break-all; }
 
@@ -402,5 +408,28 @@ function startReading(chapterId, pageNum) {
   .detail-info { text-align: center; }
   .info-tags { justify-content: center; }
   .info-actions { justify-content: center; }
+  .info-title { font-size: 22px; }
+  .chapter-section, .recommend-section, .comment-section { padding: 0 16px; }
+  .chapter-section { margin: 32px auto 40px; }
+  .comment-item { align-items: center; }
+}
+
+@media (max-width: 480px) {
+  .rec-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .detail-cover { width: 160px; }
+  .info-title { font-size: 20px; }
+  .info-author { font-size: 13px; }
+  .detail-bar { padding: 10px 12px; flex-wrap: wrap; }
+  .bar-title { font-size: 13px; }
+  .ch-num { width: 50px; font-size: 13px; }
+  .chapter-item { padding: 10px 14px; }
+  .ch-title { font-size: 13px; }
+  .detail-container { padding: 20px 12px; margin-top: 0; }
+  .rec-card { border-radius: 8px; }
+}
+
+/* 大屏优化推荐网格 */
+@media (min-width: 1200px) {
+  .rec-grid { grid-template-columns: repeat(6, 1fr); }
 }
 </style>

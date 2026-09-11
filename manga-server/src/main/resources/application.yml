@@ -40,3 +40,7 @@ jwt:
 # 文件上传路径
 app:
   upload-path: uploads/
+  ai:
+    enabled: false           # 设为 true 并配置 api-key 后启用
+    api-key: ""              # DeepSeek / OpenAI 兼容的 API Key
+    api-url: https://api.deepseek.com/v1/chat/completions

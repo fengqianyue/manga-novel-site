@@ -12,7 +12,8 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
 
     @Override
     public void add(Long userId, Long workId) {
-        // 唯一约束 uk_user_work 防止重复收藏，重复插入会抛异常
+        // 先检查是否已收藏，避免 DB 约束触发 500 错误
+        if (isFavorited(userId, workId)) return;
         Favorite f = new Favorite();
         f.setUserId(userId);
         f.setWorkId(workId);

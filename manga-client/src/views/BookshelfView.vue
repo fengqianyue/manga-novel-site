@@ -6,12 +6,13 @@ import { Plus, Upload, Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import request from '@/api/request'
 import { useUserStore } from '@/stores/user'
+import { useGoBack } from '@/composables/useGoBack'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { goBack } = useGoBack()
 const works = ref([])
 const favWorks = ref([])
-function goBack() { if (window.history.length > 1) router.back(); else router.push('/') }
 const loading = ref(true)
 
 // 导入弹窗
@@ -199,14 +200,14 @@ async function onFolderPicked(e) {
 </template>
 
 <style scoped>
-.bookshelf { min-height: 100vh; background: #f0f3f7; }
+.bookshelf { min-height: 100vh; background: var(--bg-page); }
 .shelf-bar {
   background: #fff; padding: 16px 32px; display: flex; align-items: center; gap: 20px;
   box-shadow: 0 1px 6px rgba(0,0,0,0.05); position: sticky; top: 0; z-index: 10;
 }
-.bar-back { color: #8d56da; text-decoration: none; font-size: 14px; }
+.bar-back { color: var(--accent); text-decoration: none; font-size: 14px; }
 .bar-home { color: #888; text-decoration: none; font-size: 13px; margin-left: 4px; }
-.bar-home:hover { color: #8d56da; }
+.bar-home:hover { color: var(--accent); }
 .shelf-bar h2 { font-size: 18px; color: #333; flex: 1; }
 .shelf-content { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
 .shelf-section { margin-bottom: 44px; }
@@ -231,4 +232,16 @@ async function onFolderPicked(e) {
 }
 .card-remove:hover { background: #d50707; }
 .card-item { position: relative; }
+
+/* ============================================ */
+/*  响应式适配                                    */
+/* ============================================ */
+@media (max-width: 767px) {
+  .shelf-bar { padding: 12px 16px; gap: 10px; }
+  .shelf-bar h2 { font-size: 16px; }
+  .shelf-content { padding: 20px 12px; }
+  .shelf-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card-title { font-size: 13px; }
+  :deep(.el-dialog) { width: 92vw !important; }
+}
 </style>

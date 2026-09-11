@@ -2,6 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import request from '@/api/request'
+import { useGoBack } from '@/composables/useGoBack'
 
 const router = useRouter()
 const route = useRoute()
@@ -34,13 +35,14 @@ async function loadRanking() {
 onMounted(loadRanking)
 watch([tab, subTab], loadRanking)
 
+const { goBack } = useGoBack()
 const medal = (i) => i < 3 ? ['🥇','🥈','🥉'][i] : ''
 </script>
 
 <template>
   <div class="rank-page">
     <div class="rank-bar">
-      <a href="javascript:;" class="bar-back" @click="router.back()">← 返回</a>
+      <a href="javascript:;" class="bar-back" @click="goBack">← 返回</a>
       <router-link to="/" class="bar-home">首页</router-link>
       <h2>🏆 排行榜</h2>
     </div>
@@ -76,20 +78,20 @@ const medal = (i) => i < 3 ? ['🥇','🥈','🥉'][i] : ''
 </template>
 
 <style scoped>
-.rank-page { min-height: 100vh; background: #f0f3f7; }
+.rank-page { min-height: 100vh; background: var(--bg-page); }
 .rank-bar { background: #fff; padding: 16px 32px; display: flex; align-items: baseline; gap: 10px; box-shadow: 0 1px 6px rgba(0,0,0,0.05); }
-.bar-back { color: #8d56da; text-decoration: none; font-size: 14px; }
+.bar-back { color: var(--accent); text-decoration: none; font-size: 14px; }
 .bar-home { color: #888; text-decoration: none; font-size: 13px; margin-left: 4px; }
-.bar-home:hover { color: #8d56da; }
+.bar-home:hover { color: var(--accent); }
 .rank-bar h2 { font-size: 18px; color: #333; }
 
 .rank-tabs { display: flex; gap: 0; max-width: 700px; margin: 20px auto 0; padding: 0 20px; }
 .rank-tabs span { flex: 1; text-align: center; padding: 10px; cursor: pointer; font-size: 14px; color: #888; border-bottom: 2px solid transparent; transition: all 0.2s; }
-.rank-tabs span.on { color: #8d56da; border-bottom-color: #8d56da; font-weight: 600; }
+.rank-tabs span.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
 .sub-tabs { display: flex; gap: 12px; max-width: 700px; margin: 0 auto; padding: 12px 20px 0; }
 .sub-tabs span { padding: 4px 16px; border-radius: 14px; font-size: 12px; cursor: pointer; color: #888; background: #fff; border: 1px solid #e0e0e0; transition: all 0.2s; }
-.sub-tabs span.on { background: #8d56da; color: #fff; border-color: #8d56da; }
+.sub-tabs span.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .rank-body { max-width: 700px; margin: 0 auto; padding: 16px 20px 40px; }
 .empty { text-align: center; color: #999; padding: 60px 0; }
@@ -104,4 +106,18 @@ const medal = (i) => i < 3 ? ['🥇','🥈','🥉'][i] : ''
 .rank-title { font-size: 15px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rank-meta { font-size: 12px; color: #aaa; margin-top: 3px; }
 .rank-views { font-size: 12px; color: #bbb; flex-shrink: 0; }
+
+/* ============================================ */
+/*  响应式适配                                    */
+/* ============================================ */
+@media (max-width: 767px) {
+  .rank-bar { padding: 12px 16px; flex-wrap: wrap; gap: 6px; }
+  .rank-bar h2 { font-size: 16px; }
+  .rank-tabs, .sub-tabs { padding: 0 12px; }
+  .rank-body { padding: 12px; }
+  .rank-item { padding: 10px 12px; gap: 10px; }
+  .rank-title { font-size: 14px; }
+  .rank-cover { width: 36px; height: 50px; }
+  .rank-num { width: 24px; font-size: 12px; }
+}
 </style>

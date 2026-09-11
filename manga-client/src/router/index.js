@@ -13,8 +13,9 @@ const router = createRouter({
     { path: '/category',   name: 'category',     component: () => import('../views/CategoryView.vue') },
     { path: '/bookshelf',  name: 'bookshelf',    component: () => import('../views/BookshelfView.vue') },
     { path: '/search',     name: 'search',       component: () => import('../views/SearchView.vue') },
-    { path: '/work/:id',          name: 'work-detail', component: () => import('../views/WorkDetailView.vue') },
-    { path: '/reader/:workId/:chapterId/:pageNum?', name: 'reader', component: () => import('../views/ReaderView.vue') },
+    { path: '/work/:id(\\d+)',          name: 'work-detail', component: () => import('../views/WorkDetailView.vue') },
+    { path: '/reader/:workId(\\d+)/:chapterId(\\d+)/:pageNum(\\d+)?', name: 'reader', component: () => import('../views/ReaderView.vue') },
+    { path: '/:pathMatch(.*)*', name: 'not-found', redirect: '/' },
   ],
 })
 
@@ -23,7 +24,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAdmin) {
     const store = useUserStore()
     if (!store.isAdminAuth) {
-      return { path: '/admin' } // 停留在 /admin，由组件自身显示登录表单
+      return { name: 'home' }
     }
   }
 })

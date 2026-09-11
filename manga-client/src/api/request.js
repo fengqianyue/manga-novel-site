@@ -34,6 +34,7 @@ request.interceptors.response.use(
     if (!error.config?.silent) {
       if (error.response?.status === 401) {
         localStorage.removeItem('token')
+        localStorage.removeItem('admin_token')
         ElMessage.error('登录已过期，请重新登录')
       } else {
         ElMessage.error(error.message || '网络异常')

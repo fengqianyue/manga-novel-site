@@ -1,8 +1,71 @@
 /* ======================================== */
-/*  全局样式 - yuriheme 设计语言             */
+/*  全局样式 - yuriheme 设计语言 + 深色模式   */
 /*  配色: #8d56da(紫) #f0f3f7(背景灰蓝)     */
 /* ======================================== */
 
+/* ====== CSS 变量 (亮色主题) ====== */
+:root {
+  --bg-page:       #f0f3f7;
+  --bg-card:       #ffffff;
+  --bg-nav:        #ffffff;
+  --bg-input:      #ffffff;
+  --bg-hover:      #f5f5f5;
+  --bg-purple:     #ede4f7;
+
+  --text-primary:  #222222;
+  --text-secondary:#555555;
+  --text-muted:    #999999;
+  --text-inverse:  #ffffff;
+
+  --border-light:  #e8e8e8;
+  --border-card:   #eeeeee;
+
+  --accent:        #8d56da;
+  --accent-light:  #b072d6;
+  --accent-bg:     #ede4f7;
+
+  --shadow-sm:     0 1px 4px rgba(0,0,0,0.04);
+  --shadow-md:     0 4px 20px rgba(0,0,0,0.08);
+  --shadow-lg:     0 8px 24px rgba(0,0,0,0.1);
+
+  --header-bg:     transparent;
+  --header-text:   #ffffff;
+  --header-scrolled-bg: #ffffff;
+  --header-scrolled-text: #555555;
+}
+
+/* ====== CSS 变量 (深色主题) ====== */
+html.dark {
+  --bg-page:       #0f0f0f;
+  --bg-card:       #1e1e1e;
+  --bg-nav:        #1a1a1a;
+  --bg-input:      #2a2a2a;
+  --bg-hover:      #2a2a2a;
+  --bg-purple:     #2a1f3d;
+
+  --text-primary:  #e0e0e0;
+  --text-secondary:#aaaaaa;
+  --text-muted:    #777777;
+  --text-inverse:  #e0e0e0;
+
+  --border-light:  #333333;
+  --border-card:   #2a2a2a;
+
+  --accent:        #a87fe0;
+  --accent-light:  #c4a0f0;
+  --accent-bg:     #2a1f3d;
+
+  --shadow-sm:     0 1px 4px rgba(0,0,0,0.3);
+  --shadow-md:     0 4px 20px rgba(0,0,0,0.4);
+  --shadow-lg:     0 8px 24px rgba(0,0,0,0.5);
+
+  --header-bg:     transparent;
+  --header-text:   #e0e0e0;
+  --header-scrolled-bg: #1a1a1a;
+  --header-scrolled-text: #aaaaaa;
+}
+
+/* ====== 基础重置 ====== */
 *,
 *::before,
 *::after {
@@ -13,14 +76,45 @@
 
 body {
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
-  color: #000;
+  color: var(--text-primary);
   line-height: 1.7;
-  background: #f0f3f7;
+  background: var(--bg-page);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.3s, color 0.3s;
 }
 
 a {
-  color: #8d56da;
+  color: var(--accent);
   text-decoration: none;
 }
 
+/* Element Plus 深色覆盖 */
+html.dark .el-button:not(.el-button--primary) {
+  --el-button-bg-color: var(--bg-input);
+  --el-button-border-color: var(--border-light);
+  --el-button-text-color: var(--text-secondary);
+}
+html.dark .el-input__wrapper {
+  background: var(--bg-input) !important;
+  box-shadow: 0 0 0 1px var(--border-light) inset !important;
+}
+html.dark .el-input__inner { color: var(--text-primary); }
+html.dark .el-dialog {
+  --el-dialog-bg-color: var(--bg-card);
+}
+html.dark .el-table {
+  --el-table-bg-color: var(--bg-card);
+  --el-table-tr-bg-color: var(--bg-card);
+  --el-table-header-bg-color: var(--bg-input);
+  --el-table-text-color: var(--text-primary);
+  --el-table-border-color: var(--border-light);
+}
+html.dark .el-menu {
+  --el-menu-bg-color: var(--bg-nav);
+  --el-menu-text-color: var(--text-secondary);
+}
+html.dark .el-tag--plain {
+  background: var(--bg-input);
+  border-color: var(--border-light);
+}
+html.dark .el-select .el-input__wrapper { background: var(--bg-input) !important; }

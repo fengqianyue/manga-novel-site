@@ -2,14 +2,16 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Moon, Sunny } from '@element-plus/icons-vue'
 import { login } from '@/api/user'
 import { getWorkList } from '@/api/work'
 import request from '@/api/request'
 import { useUserStore } from '@/stores/user'
+import { useDarkMode } from '@/composables/useDarkMode'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { isDark, toggle: toggleDark } = useDarkMode()
 
 const scrolled = ref(false)
 const searchKeyword = ref('')
@@ -158,6 +160,9 @@ function bgStyle(url) {
             <el-button class="btn-logout" size="small" round @click="doLogout">退出</el-button>
           </template>
           <el-button v-else class="btn-login" size="small" round @click="openLogin">登录</el-button>
+          <el-button class="btn-theme" size="small" circle @click="toggleDark" :title="isDark ? '切换亮色' : '切换深色'">
+            <el-icon><Moon v-if="!isDark" /><Sunny v-else /></el-icon>
+          </el-button>
         </nav>
       </div>
     </header>
@@ -313,13 +318,13 @@ function bgStyle(url) {
 
 /* ========================================== */
 /*  设计语言提取自 yuriheme-manga-library      */
-/*  配色: #8d56da(紫) #f0f3f7(灰蓝底)         */
+/*  配色: var(--accent)(紫) var(--bg-page)(灰蓝底)         */
 /*  以下样式仅作用于本页面，不影响其他页面      */
 /* ========================================== */
 
 .yhl-page {
   min-height: 100vh;
-  background: #f0f3f7;
+  background: var(--bg-page);
 }
 
 /* === 侧边导航（圆圈样式，复用原站设计） === */
@@ -388,8 +393,8 @@ function bgStyle(url) {
 }
 .header--scrolled {
   height: 60px;
-  background: #fff;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  background: var(--bg-nav);
+  box-shadow: var(--shadow-sm);
 }
 .header-inner {
   max-width: 1200px;
@@ -412,7 +417,7 @@ function bgStyle(url) {
 }
 .header-logo--small a { width: 110px; }
 .logo-svg { width: 100%; height: auto; display: block; }
-.logo-path { fill: #8d56da; }
+.logo-path { fill: var(--accent); }
 .header:not(.header--scrolled) .logo-path { fill: #fff; }
 
 .header-nav {
@@ -427,8 +432,8 @@ function bgStyle(url) {
   letter-spacing: 1px;
 }
 .header-nav a:hover { color: rgba(255,255,255,0.7); }
-.header--scrolled .header-nav a { color: #555; }
-.header--scrolled .header-nav a:hover { color: #8d56da; }
+.header--scrolled .header-nav a { color: var(--text-secondary); }
+.header--scrolled .header-nav a:hover { color: var(--accent); }
 .btn-login {
   background: #5e5477 !important;
   border-color: #5e5477 !important;
@@ -439,7 +444,7 @@ function bgStyle(url) {
 .header-avatar { cursor: pointer; display: flex; align-items: center; transition: transform 0.2s; }
 .header-avatar:hover { transform: scale(1.15); }
 .avatar-small { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.4); transition: border-color 0.2s; }
-.header-avatar:hover .avatar-small { border-color: #8d56da; }
+.header-avatar:hover .avatar-small { border-color: var(--accent); }
 .avatar-placeholder-svg { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; }
 .header--scrolled .avatar-placeholder-svg { background: rgba(0,0,0,0.08); }
 
@@ -450,8 +455,8 @@ function bgStyle(url) {
 }
 .btn-logout:hover { border-color: #fff !important; }
 .header--scrolled .btn-logout {
-  border-color: #ccc !important;
-  color: #555 !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-secondary) !important;
 }
 
 /* === 横幅 === */
@@ -466,7 +471,7 @@ function bgStyle(url) {
 .hero-bg {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #8d56da 0%, #b072d6 40%, #da56c3 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 40%, #da56c3 100%);
 }
 .hero-bg::after {
   content: '';
@@ -510,7 +515,7 @@ function bgStyle(url) {
   top: 50%;
   transform: translateY(-50%);
   cursor: pointer;
-  color: #8d56da;
+  color: var(--accent);
   font-size: 20px;
   z-index: 10;
   transition: opacity 0.2s;
@@ -545,7 +550,7 @@ function bgStyle(url) {
   font-family: 'Rajdhani', 'Arial', sans-serif;
   font-size: 24px;
   font-weight: 600;
-  color: #8d56da;
+  color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 3px;
 }
@@ -562,7 +567,7 @@ function bgStyle(url) {
   transition: color 0.3s;
 }
 .sec-more:hover {
-  color: #8d56da;
+  color: var(--accent);
 }
 
 /* 卡片网格 */
@@ -616,7 +621,7 @@ function bgStyle(url) {
   content: '';
   position: absolute; bottom: 0; left: 0; right: 0;
   height: 50px;
-  background: linear-gradient(#8d56da, #da56c3);
+  background: linear-gradient(var(--accent), #da56c3);
   opacity: 0;
   transition: opacity 0.35s ease;
 }
@@ -690,7 +695,7 @@ function bgStyle(url) {
   color: #999;
 }
 .dialog-register-tip a {
-  color: #8d56da;
+  color: var(--accent);
   cursor: pointer;
 }
 </style>
