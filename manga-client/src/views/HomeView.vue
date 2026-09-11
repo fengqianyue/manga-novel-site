@@ -151,6 +151,7 @@ function bgStyle(url) {
           <router-link to="/category">分类</router-link>
           <router-link to="/ranking">排行榜</router-link>
           <router-link to="/bookshelf">书架</router-link>
+          <router-link v-if="(userStore.user?.role || 0) >= 1" to="/author" class="nav-author">作者中心</router-link>
           <template v-if="userStore.isLoggedIn">
             <span class="header-avatar" @click="router.push('/user')">
               <img v-if="(userStore.user || userStore.adminUser)?.avatarUrl"

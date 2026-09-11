@@ -28,11 +28,15 @@ public class WorkController {
     private final IWorkService workService;
     private final IWorkTagService workTagService;
     private final SearchService searchService;
+    private final com.manganovel.security.WorkOwnerChecker ownerChecker;
 
-    public WorkController(IWorkService workService, IWorkTagService workTagService, SearchService searchService) {
+    public WorkController(IWorkService workService, IWorkTagService workTagService,
+                          SearchService searchService,
+                          com.manganovel.security.WorkOwnerChecker ownerChecker) {
         this.workService = workService;
         this.workTagService = workTagService;
         this.searchService = searchService;
+        this.ownerChecker = ownerChecker;
     }
 
     @GetMapping("/list")
@@ -213,9 +217,11 @@ public class WorkController {
     }
 
     @PutMapping("/{id}/tags")
-    @RequireRole
-    @Operation(summary = "更新作品的标签")
-    public Result<?> updateTags(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    @RequireRole(1) // 管理员或作者
+    @Operation(summary = "更新作品的标签（作者须为作品属主）")
+    public Result<?> updateTags(@RequestHeader("Authorization") String auth,
+                                 @PathVariable Long id, @RequestBody Map<String, Object> body) {
+        ownerChecker.check(id, auth);
         @SuppressWarnings("unchecked")
         List<Integer> rawIds = (List<Integer>) body.get("tagIds");
         List<Long> tagIds = rawIds.stream().map(Integer::longValue).toList();

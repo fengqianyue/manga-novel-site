@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Document, Tickets, PriceTag, Lock, Search, User, Menu } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Document, Tickets, PriceTag, Lock, Search, User, Menu, Upload } from '@element-plus/icons-vue'
 import { getWorkList, getWorkTags } from '@/api/work'
-import { adminLogin, addWork, updateWork, toggleWorkStatus, updateWorkTags } from '@/api/admin'
-import { getTags, addTag, deleteTag } from '@/api/admin'
+import { adminLogin, addWork, updateWork, toggleWorkStatus, auditWork, setUserRole, updateWorkTags } from '@/api/admin'
+import { getTags, addTag, deleteTag, importManga, importNovel } from '@/api/admin'
 import { getChapters, addChapter, deleteChapter } from '@/api/admin'
 import request from '@/api/request'
 import { useUserStore } from '@/stores/user'
@@ -218,6 +218,61 @@ async function onTxtSuccess(res) {
   selectWork(selectedWork.value)
 }
 
+// ========== 作品整部导入（ZIP/CBZ · TXT/EPUB） ==========
+const showQuickImport = ref(false)
+const quickImporting = ref(false)
+const quickFile = ref(null)
+const quickForm = reactive({
+  kind: 'manga',   // manga=漫画ZIP/CBZ  novel-txt=小说TXT  novel-epub=小说EPUB
+  title: '', author: '', summary: '', publishYear: null, completed: 1,
+})
+
+const quickAccept = computed(() =>
+  quickForm.kind === 'manga' ? '.zip,.cbz' : quickForm.kind === 'novel-txt' ? '.txt' : '.epub')
+
+function openQuickImport() {
+  quickFile.value = null
+  Object.assign(quickForm, { kind: 'manga', title: '', author: '', summary: '', publishYear: null, completed: 1 })
+  showQuickImport.value = true
+}
+
+function onQuickFileChange(uploadFile) {
+  quickFile.value = uploadFile.raw || null
+  // 未填标题时用文件名预填
+  if (!quickForm.title && uploadFile.name) {
+    quickForm.title = uploadFile.name.replace(/\.(zip|cbz|txt|epub)$/i, '')
+  }
+}
+
+function removeQuickFile() { quickFile.value = null }
+
+async function doQuickImport() {
+  if (!quickFile.value) { ElMessage.warning('请选择要导入的文件'); return }
+  if (!quickForm.title.trim()) { ElMessage.warning('请填写作品标题'); return }
+  quickImporting.value = true
+  try {
+    const form = new FormData()
+    form.append('file', quickFile.value)
+    form.append('title', quickForm.title.trim())
+    if (quickForm.author) form.append('author', quickForm.author.trim())
+    if (quickForm.summary) form.append('summary', quickForm.summary.trim())
+    if (quickForm.publishYear) form.append('publishYear', quickForm.publishYear)
+    form.append('completed', quickForm.completed)
+    const isManga = quickForm.kind === 'manga'
+    const res = isManga ? await importManga(form) : await importNovel(form)
+    const d = res.data
+    ElMessage.success(isManga
+      ? `导入成功：${d.chapters} 个章节 / ${d.pages} 页图片`
+      : `导入成功：${d.chapters} 个章节 / 约 ${(d.chars / 10000).toFixed(1)} 万字`)
+    showQuickImport.value = false
+    loadAll()
+  } catch {
+    // 拦截器已提示错误
+  } finally {
+    quickImporting.value = false
+  }
+}
+
 // ========== 用户管理 ==========
 async function loadUsers() {
   const res = await request.get('/user/list', { silent: true })
@@ -228,6 +283,17 @@ async function toggleUser(row) {
   await ElMessageBox.confirm(`确认${action}用户「${row.username}」？`)
   await request.put(`/user/${row.id}/toggle`, null, { silent: true })
   ElMessage.success(`已${action}`)
+  loadUsers()
+}
+
+async function toggleAuthorRole(row) {
+  const becoming = row.role !== 1
+  await ElMessageBox.confirm(
+    becoming ? `确认授予「${row.username}」作者身份？作者可在作者中心发布作品（需管理员审核后公开）`
+             : `确认撤销「${row.username}」的作者身份？其已发布的作品不受影响`,
+    becoming ? '设为作者' : '取消作者', { type: 'warning' })
+  await setUserRole(row.id, becoming ? 1 : 0)
+  ElMessage.success(becoming ? '已授予作者身份' : '已撤销作者身份')
   loadUsers()
 }
 
@@ -265,6 +331,28 @@ async function toggleWork(row) {
   await toggleWorkStatus(row.id, row.status === 1 ? 0 : 1)
   loadAll()
 }
+
+// ========== 作品审核（作者提交的待审核作品） ==========
+async function auditWorkPass(row) {
+  await ElMessageBox.confirm(`确认通过「${row.title}」的审核？通过后立即公开展示`, '审核通过', { type: 'success' })
+  await auditWork(row.id, true)
+  ElMessage.success('已通过并上架')
+  loadAll()
+}
+
+async function auditWorkReject(row) {
+  const { value } = await ElMessageBox.prompt('请填写驳回理由（作者可见）', '驳回作品', {
+    confirmButtonText: '驳回',
+    cancelButtonText: '取消',
+    inputPlaceholder: '例如：章节内容不完整 / 封面涉及版权问题',
+    inputValidator: v => (v && v.trim().length >= 2) || '驳回理由至少 2 个字',
+  })
+  await auditWork(row.id, false, value.trim())
+  ElMessage.success('已驳回')
+  loadAll()
+}
+
+const pendingCount = computed(() => works.value.filter(w => w.status === 2).length)
 
 // ========== 章节 ==========
 const newChapterVisible = ref(false)
@@ -460,12 +548,15 @@ async function doDeleteTag(tag) {
           <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
             <el-radio-group v-model="workStatusFilter" size="small" @change="onStatusFilter">
               <el-radio-button :value="null">全部</el-radio-button>
+              <el-radio-button :value="2">待审核<template v-if="pendingCount">({{ pendingCount }})</template></el-radio-button>
               <el-radio-button :value="1">上架</el-radio-button>
               <el-radio-button :value="0">下架</el-radio-button>
+              <el-radio-button :value="3">已驳回</el-radio-button>
             </el-radio-group>
             <el-input v-model="workSearch" placeholder="搜索标题/作者" size="small" style="width:220px" clearable @clear="onSearch" @keyup.enter="onSearch">
               <template #suffix><el-icon @click="onSearch" style="cursor:pointer"><Search /></el-icon></template>
             </el-input>
+            <el-button :icon="Upload" @click="openQuickImport">快速导入作品</el-button>
             <el-button type="primary" :icon="Plus" @click="openAddWork">新增作品</el-button>
           </div>
           <el-table :data="works" stripe>
@@ -475,15 +566,26 @@ async function doDeleteTag(tag) {
             <el-table-column prop="type" label="类型" width="80">
               <template #default="{ row }">{{ row.type === 'manga' ? '漫画' : '小说' }}</template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="80">
+            <el-table-column prop="status" label="状态" width="92">
               <template #default="{ row }">
-                <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">{{ row.status === 1 ? '上架' : '下架' }}</el-tag>
+                <el-tag v-if="row.status === 2" type="warning" size="small">待审核</el-tag>
+                <el-tooltip v-else-if="row.status === 3 && row.rejectReason" :content="'驳回理由：' + row.rejectReason" placement="top">
+                  <el-tag type="danger" size="small">已驳回</el-tag>
+                </el-tooltip>
+                <el-tag v-else-if="row.status === 3" type="danger" size="small">已驳回</el-tag>
+                <el-tag v-else :type="row.status === 1 ? 'success' : 'info'" size="small">{{ row.status === 1 ? '上架' : '下架' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="250">
+            <el-table-column label="操作" width="290">
               <template #default="{ row }">
-                <el-button size="small" :icon="Edit" @click="openEditWork(row)">编辑</el-button>
-                <el-button size="small" @click="toggleWork(row)">{{ row.status === 1 ? '下架' : '上架' }}</el-button>
+                <template v-if="row.status === 2">
+                  <el-button size="small" type="success" @click="auditWorkPass(row)">通过</el-button>
+                  <el-button size="small" type="warning" plain @click="auditWorkReject(row)">驳回</el-button>
+                </template>
+                <template v-else>
+                  <el-button size="small" :icon="Edit" @click="openEditWork(row)">编辑</el-button>
+                  <el-button size="small" @click="toggleWork(row)">{{ row.status === 1 ? '下架' : '上架' }}</el-button>
+                </template>
                 <el-button size="small" type="danger" :icon="Delete" @click="deleteWork(row)">删除</el-button>
               </template>
             </el-table-column>
@@ -543,11 +645,20 @@ async function doDeleteTag(tag) {
             <el-table-column prop="username" label="用户名" />
             <el-table-column prop="email" label="邮箱" />
             <el-table-column prop="role" label="角色" width="90">
-              <template #default="{ row }">{{ row.role === 1 ? '管理员' : '用户' }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="100">
               <template #default="{ row }">
-                <el-button v-if="row.role !== 1" size="small" type="danger" plain @click="toggleUser(row)">
+                <el-tag v-if="row.role === 2" type="danger" size="small">管理员</el-tag>
+                <el-tag v-else-if="row.role === 1" type="warning" size="small">作者</el-tag>
+                <el-tag v-else type="info" size="small">用户</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="190">
+              <template #default="{ row }">
+                <el-button v-if="row.role !== 2" size="small"
+                  :type="row.role === 1 ? 'warning' : 'success'" plain
+                  @click="toggleAuthorRole(row)">
+                  {{ row.role === 1 ? '取消作者' : '设为作者' }}
+                </el-button>
+                <el-button v-if="row.role !== 2" size="small" type="danger" plain @click="toggleUser(row)">
                   {{ row.isDeleted ? '启用' : '禁用' }}
                 </el-button>
                 <span v-else style="color:#ccc;font-size:12px">—</span>
@@ -725,6 +836,84 @@ async function doDeleteTag(tag) {
         <el-icon class="el-icon--upload"><Plus /></el-icon>
         <div class="el-upload__text">拖拽 TXT 文件到此处 或 <em>点击选择</em></div>
       </el-upload>
+    </el-dialog>
+
+    <!-- 快速导入弹窗（整部作品） -->
+    <el-dialog v-model="showQuickImport" title="快速导入作品" width="560px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" style="margin-bottom:16px">
+        <template #title>
+          <span v-if="quickForm.kind === 'manga'">
+            上传 ZIP/CBZ 漫画包：每个子文件夹 = 一个章节，文件夹内图片按自然顺序作为页面（与 Komga/Kavita 等漫画站一致的目录约定）。未填封面时自动取第一页。
+          </span>
+          <span v-else-if="quickForm.kind === 'novel-txt'">
+            上传 TXT 小说：自动识别 UTF-8 / GBK 编码，按「第X章 / 第X回 / 楔子 / Chapter N」等格式智能分章，一次性建好整本书。
+          </span>
+          <span v-else>
+            上传 EPUB 小说：按书内 spine 顺序抽取各章正文（跳过封面/版权页），适合导入正规电子书。
+          </span>
+        </template>
+      </el-alert>
+      <el-form label-position="top">
+        <el-form-item label="导入类型">
+          <el-radio-group v-model="quickForm.kind">
+            <el-radio-button value="manga">漫画 ZIP/CBZ</el-radio-button>
+            <el-radio-button value="novel-txt">小说 TXT</el-radio-button>
+            <el-radio-button value="novel-epub">小说 EPUB</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item>
+          <div class="quick-drop" v-if="!quickFile" :class="{ 'is-novel': quickForm.kind !== 'manga' }">
+            <el-upload drag :accept="quickAccept" :auto-upload="false" :limit="1" :on-change="onQuickFileChange">
+              <el-icon class="el-icon--upload"><Upload /></el-icon>
+              <div class="el-upload__text">
+                将文件拖到此处，或<em>点击选择</em>
+                <div class="quick-hint">{{ quickForm.kind === 'manga' ? '支持 .zip / .cbz，单文件最大 300MB' : (quickForm.kind === 'novel-txt' ? '支持 .txt' : '支持 .epub') }}</div>
+              </div>
+            </el-upload>
+          </div>
+          <div v-else class="quick-file">
+            <span class="quick-file-name">{{ quickFile.name }}</span>
+            <span class="quick-file-size">{{ (quickFile.size / 1024 / 1024).toFixed(2) }} MB</span>
+            <el-button size="small" text type="danger" @click="removeQuickFile">移除</el-button>
+          </div>
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="标题" required>
+              <el-input v-model="quickForm.title" placeholder="作品标题" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="作者">
+              <el-input v-model="quickForm.author" placeholder="作者名" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="简介">
+          <el-input v-model="quickForm.summary" type="textarea" :rows="2" placeholder="作品简介（选填）" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="出版年份">
+              <el-input-number v-model="quickForm.publishYear" :min="1000" :max="2100" placeholder="如 1939" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="完结状态">
+              <el-radio-group v-model="quickForm.completed">
+                <el-radio :value="1">已完结</el-radio>
+                <el-radio :value="0">连载中</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <el-button @click="showQuickImport = false">取消</el-button>
+        <el-button type="primary" :loading="quickImporting" @click="doQuickImport">
+          {{ quickImporting ? '正在导入...' : '开始导入' }}
+        </el-button>
+      </template>
     </el-dialog>
 
     <!-- 漫画页预览弹窗 -->
@@ -932,5 +1121,19 @@ async function doDeleteTag(tag) {
   .dash-card { padding: 12px 8px; }
   .dc-num { font-size: 20px; }
   .trend-bar { width: 20px; }
+}
+
+/* ====== 快速导入弹窗 ====== */
+.quick-drop :deep(.el-upload-dragger) { width: 100%; }
+.quick-hint { color: #999; font-size: 12px; margin-top: 6px; }
+.quick-file {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  background: #f5f7fa; border: 1px solid #e4e7ed; border-radius: 6px;
+  padding: 12px 16px;
+}
+.quick-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: #333; }
+.quick-file-size { color: #999; font-size: 12px; }
+@media (max-width: 767px) {
+  .quick-file-name { font-size: 12px; }
 }
 </style>
