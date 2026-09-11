@@ -45,6 +45,21 @@ services:
     networks:
       - manga-net
 
+  # ==================== Redis 7 缓存 ====================
+  redis:
+    image: redis:7-alpine
+    container_name: manga-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - manga-net
+
   # ==================== Spring Boot 后端 ====================
   backend:
     build:
@@ -59,11 +74,14 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/manga_novel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=${MYSQL_ROOT_USERNAME:-root}
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD:-123456}
+      - SPRING_DATA_REDIS_HOST=redis
       - APP_ES_URI=http://elasticsearch:9200
       - APP_UPLOAD_PATH=/app/uploads
     volumes:
